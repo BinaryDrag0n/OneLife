@@ -602,6 +602,7 @@ void EditorSpriteTrimPage::actionPerformed( GUIComponent *inTarget ) {
                        false,
                        0, 0,
                        false,
+                       false,
                        spriteBehindPlayer,
                        spriteAdditiveBlend,
                        (char*)"0",

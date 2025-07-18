@@ -1003,6 +1003,18 @@ float initObjectBankStep() {
                 
                 setupBlocksMoving( r );
                 
+
+                if( strstr( lines[next], "blockModifier=" ) != NULL ) {
+                    // flag present
+                    
+                    int blockModifierRead = 0;
+                    sscanf( lines[next], "blockModifier=%d", &( blockModifierRead ) );
+                    
+                    r->blockModifier = blockModifierRead;
+                    
+                    next++;
+                    }
+                
                 
                 r->mapChance = 0;      
                 char biomeString[200];
@@ -2783,6 +2795,7 @@ int reAddObject( ObjectRecord *inObject,
                         inObject->blocksWalking,
                         inObject->leftBlockingRadius,
                         inObject->rightBlockingRadius,
+                        inObject->blockModifier,
                         inObject->drawBehindPlayer,
                         inObject->spriteBehindPlayer,
                         inObject->spriteAdditiveBlend,
@@ -3129,6 +3142,7 @@ int addObject( const char *inDescription,
                int inRidingAnimationIndex,
                char inBlocksWalking,
                int inLeftBlockingRadius, int inRightBlockingRadius,
+               char inBlockModifier,
                char inDrawBehindPlayer,
                char *inSpriteBehindPlayer,
                char *inSpriteAdditiveBlend,
@@ -3358,6 +3372,8 @@ int addObject( const char *inDescription,
                              inLeftBlockingRadius, 
                              inRightBlockingRadius,
                              (int)inDrawBehindPlayer ) );
+        
+        lines.push_back( autoSprintf( "blockModifier=%d", (int)inBlockModifier ) );
         
         lines.push_back( autoSprintf( "mapChance=%f#biomes_%s", 
                                       inMapChance, inBiomes ) );
@@ -3666,6 +3682,7 @@ int addObject( const char *inDescription,
     r->blocksWalking = inBlocksWalking;
     r->leftBlockingRadius = inLeftBlockingRadius;
     r->rightBlockingRadius = inRightBlockingRadius;
+    r->blockModifier = inBlockModifier;
     r->drawBehindPlayer = inDrawBehindPlayer;
 
 

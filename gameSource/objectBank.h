@@ -108,6 +108,10 @@ typedef struct ObjectRecord {
         char wide;
         
         int leftBlockingRadius, rightBlockingRadius;
+
+        //true for objects that when held block the player from walking 
+        //on anything but the items in a choosen category.
+        char blockModifier;
         
 
         // true for objects that are forced behind player
@@ -583,6 +587,7 @@ int addObject( const char *inDescription,
                int inRidingAnimationIndex,
                char inBlocksWalking,
                int inLeftBlockingRadius, int inRightBlockingRadius,
+               char inBlockModifier,
                char inDrawBehindPlayer,
                char *inSpriteBehindPlayer,
                char *inSpriteAdditiveBlend,

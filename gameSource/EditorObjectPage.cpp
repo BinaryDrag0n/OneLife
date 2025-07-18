@@ -182,6 +182,7 @@ EditorObjectPage::EditorObjectPage()
                                     false,
                                     "", "-0123456789", NULL ),
           mBlocksWalkingCheckbox( 290, -4, 2 ),
+          mBlockModifierCheckbox( 635, -150, 2 ),
           
           mDrawBehindPlayerCheckbox( 635, -90, 2 ),
           mFloorHuggingCheckbox( 635, -130, 2 ),
@@ -699,6 +700,10 @@ EditorObjectPage::EditorObjectPage()
     mBlocksWalkingCheckbox.setVisible( true );
     mBlocksWalkingCheckbox.addActionListener( this );
 
+    addComponent( &mBlockModifierCheckbox );
+    mBlockModifierCheckbox.setVisible( true );
+    mBlockModifierCheckbox.addActionListener( this );
+
     addComponent( &mDrawBehindPlayerCheckbox );
     mDrawBehindPlayerCheckbox.setVisible( false );
     mDrawBehindPlayerCheckbox.addActionListener( this );
@@ -1070,6 +1075,7 @@ void EditorObjectPage::updateAgingPanel() {
         mRidingAnimationIndexField.setVisible( false );
         mRidingAnimationIndexField.setInt( -1 );
         mBlocksWalkingCheckbox.setVisible( false );
+        mBlockModifierCheckbox.setVisible( false );
         
         if( mPickedObjectLayer != -1 ) {
             mAgingLayerCheckbox.setVisible( true );
@@ -1576,6 +1582,7 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
                    mBlocksWalkingCheckbox.getToggled(),
                    mLeftBlockingRadiusField.getInt(),
                    mRightBlockingRadiusField.getInt(),
+                   mBlockModifierCheckbox.getToggled(),
                    mDrawBehindPlayerCheckbox.getToggled(),
                    mCurrentObject.spriteBehindPlayer,
                    mCurrentObject.spriteAdditiveBlend,
@@ -1755,6 +1762,7 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
                    mBlocksWalkingCheckbox.getToggled(),
                    mLeftBlockingRadiusField.getInt(),
                    mRightBlockingRadiusField.getInt(),
+                   mBlockModifierCheckbox.getToggled(),
                    mDrawBehindPlayerCheckbox.getToggled(),
                    mCurrentObject.spriteBehindPlayer,
                    mCurrentObject.spriteAdditiveBlend,
@@ -2556,6 +2564,7 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
             mRightBlockingRadiusField.setVisible( false );
             mLeftBlockingRadiusField.setInt( 0 );
             mRightBlockingRadiusField.setInt( 0 );
+            mBlockModifierCheckbox.setToggled( false ),
             mDrawBehindPlayerCheckbox.setToggled( false );
             mFloorHuggingCheckbox.setToggled( false );
             mWallLayerCheckbox.setToggled( false );
@@ -3523,8 +3532,9 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
             
             mLeftBlockingRadiusField.setInt( pickedRecord->leftBlockingRadius );
             
-            mRightBlockingRadiusField.setInt( 
-                pickedRecord->rightBlockingRadius );
+            mRightBlockingRadiusField.setInt( pickedRecord->rightBlockingRadius );
+
+            mBlockModifierCheckbox.setToggled( pickedRecord->blockModifier );
             
             if( mBlocksWalkingCheckbox.getToggled() &&
                 mCheckboxes[1]->getToggled() ) {
@@ -4889,6 +4899,12 @@ void EditorObjectPage::draw( doublePair inViewCenter,
         pos = mBlocksWalkingCheckbox.getPosition();
         pos.x -= checkboxSep;
         smallFont->drawString( "Blocking", pos, alignRight );
+        }
+    
+    if( mBlockModifierCheckbox.isVisible() ) {
+        pos = mBlockModifierCheckbox.getPosition();
+        pos.x -= checkboxSep;
+        smallFont->drawString( "BlockMod", pos, alignRight );
         }
 
     if( mDrawBehindPlayerCheckbox.isVisible() ) {
