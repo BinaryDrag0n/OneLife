@@ -3099,14 +3099,28 @@ void LivingLifePage::computePathToDest( LiveObject *inObject ) {
                 mapX >= 0 && mapX < mMapD ) { 
 
                 int mapI = mapY * mMapD + mapX;
-            
-                // note that unknowns (-1) count as blocked too
-                if( mMap[ mapI ] == 0
-                    ||
-                    ( mMap[ mapI ] != -1 && 
-                      ! getObject( mMap[ mapI ] )->blocksWalking ) ) {
+                
+                if( getObject( inObject->holdingID )->blockModifier == 0 ){
+
+                    // note that unknowns (-1) count as blocked too
+                    if( mMap[ mapI ] == 0
+                        ||
+                        ( mMap[ mapI ] != -1 && 
+                          ! getObject( mMap[ mapI ] )->blocksWalking ) ) {
                     
-                    blockedMap[ y * pathFindingD + x ] = false;
+                        blockedMap[ y * pathFindingD + x ] = false;
+                        }
+                    }
+                    
+                else {
+                    
+                    if( mMap[ mapI ] == 0
+                        ||
+                        ( mMap[ mapI ] != -1 && 
+                          mMap[ mapI ] != 6438 ) ) {
+                    
+                        blockedMap[ y * pathFindingD + x ] = false;
+                        }
                     }
                 }
             }

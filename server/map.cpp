@@ -6977,9 +6977,23 @@ unsigned char *getChunkMessage( int inStartX, int inStartY,
  
  
  
- 
-char isMapSpotBlocking( int inX, int inY ) {
+//heldId is optional (used in blockModifier item property)
+char isMapSpotBlocking( int inX, int inY, int heldID) {
    
+    if ( heldID != 0){
+        if ( getObject( heldID )->blockModifier == 1 ){
+
+            int target = getMapObject( inX, inY );
+
+            //temp
+            if ( false ){
+                return true;
+                }
+
+            return false;
+            }
+        }
+
     char cachedVal = blockingGetCached( inX, inY );
     if( cachedVal != -1 ) {
        

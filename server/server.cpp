@@ -16922,7 +16922,8 @@ int main() {
                                 char currentBlocked = false;
                                 
                                 if( isMapSpotBlocking( lastValidPathStep.x,
-                                                       lastValidPathStep.y ) ) {
+                                                       lastValidPathStep.y,
+                                                       nextPlayer->holdingID ) ) {
                                     currentBlocked = true;
                                     }
                                 
@@ -16933,7 +16934,7 @@ int main() {
                                     GridPos pos = 
                                         unfilteredPath.getElementDirect(p);
 
-                                    if( isMapSpotBlocking( pos.x, pos.y ) ) {
+                                    if( isMapSpotBlocking( pos.x, pos.y, nextPlayer->holdingID ) ) {
                                         // blockage in middle of path
                                         // terminate path here
                                         truncated = 1;
