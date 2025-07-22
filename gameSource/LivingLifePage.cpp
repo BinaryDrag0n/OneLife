@@ -26181,9 +26181,10 @@ void LivingLifePage::pointerDown( float inX, float inY ) {
         }
 
     
-    if( destID > 0 && ! p.hitAnObject ) {
+    if( destID > 0 && ! p.hitAnObject 
+        && getObject( ourLiveObject->holdingID )->blockModifier == 0 ) {
         
-        // clicked on empty space near an object
+        // clicked on empty space near an object and what's blocking isn't modified
         
         if( ! getObject( destID )->blocksWalking ) {
             
@@ -26263,6 +26264,12 @@ void LivingLifePage::pointerDown( float inX, float inY ) {
                 }
             }
         }
+    
+    else if ( destID > 0 && ! p.hitAnObject ){
+        //holding an item which modifies what's blocking you
+
+        destID = 0;
+    }
 
     printf( "DestID = %d\n", destID );
     
@@ -29142,7 +29149,11 @@ void LivingLifePage::movementStep() {
     if (x == lastPosX && y == lastPosY && ourLiveObject->inMotion) return;
 
     int objId = getObjId(x, y);
-    if (objId > 0 && getObject(objId)->blocksWalking && ourLiveObject->inMotion) return;
+    if (objId > 0 && getObject(objId)->blocksWalking && ourLiveObject->inMotion && getObject( ourLiveObject->holdingID )->blockModifier == 0 ) return;
+
+    if (objId > 0 && ourLiveObject->inMotion && getObject( ourLiveObject->holdingID )->blockModifier == 1 ){
+        //Add Conditions
+        }
 
     int sX = x;
     int sY = y;
@@ -29348,10 +29359,15 @@ bool LivingLifePage::tileIsSafeToWalk(int x, int y) {
         if (!tileHasNoDangerousAnimals(x, y)) return false;
 
         ObjectRecord* obj = getObject(objId);
-        if (obj && obj->blocksWalking) {
+        if (obj && obj->blocksWalking && getObject( ourLiveObject->holdingID )->blockModifier == 0) {
             if (ourLiveObject->xd == x || ourLiveObject->yd == y)
                 if (tileHasClosedDoor( x, y )) return true;
             return false;
+        }
+        
+        else if (obj && getObject( ourLiveObject->holdingID )->blockModifier == 1)
+        {
+            return true;
         }
     }
     return true;
