@@ -1008,10 +1008,19 @@ float initObjectBankStep() {
                     // flag present
                     
                     int blockModifierRead = 0;
-                    sscanf( lines[next], "blockModifier=%d", &( blockModifierRead ) );
+                    int OnlyAllowRead = 0;
+                    r->blockModCategoryID = 0;
+                    sscanf( lines[next], 
+                            "blockModifier=%d," 
+                            "blockModeOnlyAllow=%d," 
+                            "blockModCategoryID=%d", 
+                            &( blockModifierRead ), 
+                            &( OnlyAllowRead ), 
+                            &( r->blockModCategoryID ) );
                     
                     r->blockModifier = blockModifierRead;
-                    
+                    r->blockModeOnlyAllow = OnlyAllowRead;
+
                     next++;
                     }
                 
@@ -2795,8 +2804,10 @@ int reAddObject( ObjectRecord *inObject,
                         inObject->blocksWalking,
                         inObject->leftBlockingRadius,
                         inObject->rightBlockingRadius,
-                        inObject->blockModifier,
                         inObject->drawBehindPlayer,
+                        inObject->blockModifier,
+                        inObject->blockModeOnlyAllow,
+                        inObject->blockModCategoryID,
                         inObject->spriteBehindPlayer,
                         inObject->spriteAdditiveBlend,
                         biomeString,
@@ -3142,8 +3153,10 @@ int addObject( const char *inDescription,
                int inRidingAnimationIndex,
                char inBlocksWalking,
                int inLeftBlockingRadius, int inRightBlockingRadius,
-               char inBlockModifier,
                char inDrawBehindPlayer,
+               char inBlockModifier,
+               char inBlockModeOnlyAllow,
+               int inBlockModCategoryID,
                char *inSpriteBehindPlayer,
                char *inSpriteAdditiveBlend,
                char *inBiomes,
@@ -3373,7 +3386,13 @@ int addObject( const char *inDescription,
                              inRightBlockingRadius,
                              (int)inDrawBehindPlayer ) );
         
-        lines.push_back( autoSprintf( "blockModifier=%d", (int)inBlockModifier ) );
+        lines.push_back( autoSprintf( 
+                            "blockModifier=%d," 
+                            "blockModeOnlyAllow=%d,"
+                            "blockModCategoryID=%d", 
+                            (int)inBlockModifier, 
+                            (int)inBlockModeOnlyAllow,
+                            inBlockModCategoryID ) );
         
         lines.push_back( autoSprintf( "mapChance=%f#biomes_%s", 
                                       inMapChance, inBiomes ) );
@@ -3682,9 +3701,11 @@ int addObject( const char *inDescription,
     r->blocksWalking = inBlocksWalking;
     r->leftBlockingRadius = inLeftBlockingRadius;
     r->rightBlockingRadius = inRightBlockingRadius;
-    r->blockModifier = inBlockModifier;
     r->drawBehindPlayer = inDrawBehindPlayer;
 
+    r->blockModifier = inBlockModifier;
+    r->blockModeOnlyAllow = inBlockModeOnlyAllow;
+    r->blockModCategoryID = inBlockModCategoryID;
 
     r->anySpritesBehindPlayer = false;
     r->spriteBehindPlayer = NULL;

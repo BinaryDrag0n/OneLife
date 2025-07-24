@@ -109,14 +109,21 @@ typedef struct ObjectRecord {
         
         int leftBlockingRadius, rightBlockingRadius;
 
-        //true for objects that when held block the player from walking 
-        //on anything but the items in a choosen category.
-        char blockModifier;
-        
-
         // true for objects that are forced behind player
         // wide objects have this set to true automatically
         char drawBehindPlayer;
+
+
+        //true for objects that when held remove items of a category from being blocking
+        char blockModifier;
+
+        //true for objects with blockModifier that when held block the player 
+        //from walking on anything but the items in a choosen category.
+        char blockModeOnlyAllow;
+
+        //stores the Category ID in which the items which become allowed to walk on are stored
+        int blockModCategoryID;
+        
         
         // for individual sprite indices that are drawn behind
         // when whole object is not drawn behind
@@ -587,8 +594,10 @@ int addObject( const char *inDescription,
                int inRidingAnimationIndex,
                char inBlocksWalking,
                int inLeftBlockingRadius, int inRightBlockingRadius,
-               char inBlockModifier,
                char inDrawBehindPlayer,
+               char inBlockModifier,
+               char inBlockModeOnlyAllow,
+               int inBlockModCategoryID,
                char *inSpriteBehindPlayer,
                char *inSpriteAdditiveBlend,
                char *inBiomes,

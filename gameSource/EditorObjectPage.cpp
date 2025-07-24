@@ -182,9 +182,13 @@ EditorObjectPage::EditorObjectPage()
                                     false,
                                     "", "-0123456789", NULL ),
           mBlocksWalkingCheckbox( 290, -4, 2 ),
-          mBlockModifierCheckbox( 635, -150, 2 ),
-          
           mDrawBehindPlayerCheckbox( 635, -90, 2 ),
+          mBlockModifierCheckbox( 635, -50, 2 ),
+          mBlockModeOnlyAllowCheckbox( 635, -70, 2 ),
+          mBlockModCategoryIDField( smallFont,
+                                    800, -60, 5,
+                                    false,
+                                    "CategoryID", "0123456789", NULL ),
           mFloorHuggingCheckbox( 635, -130, 2 ),
           mWallLayerCheckbox( 635, -150, 2 ),
           mFrontWallCheckbox( 635, -170, 2 ),
@@ -700,13 +704,20 @@ EditorObjectPage::EditorObjectPage()
     mBlocksWalkingCheckbox.setVisible( true );
     mBlocksWalkingCheckbox.addActionListener( this );
 
+    addComponent( &mDrawBehindPlayerCheckbox );
+    mDrawBehindPlayerCheckbox.setVisible( false );
+    mDrawBehindPlayerCheckbox.addActionListener( this );
+
     addComponent( &mBlockModifierCheckbox );
     mBlockModifierCheckbox.setVisible( true );
     mBlockModifierCheckbox.addActionListener( this );
 
-    addComponent( &mDrawBehindPlayerCheckbox );
-    mDrawBehindPlayerCheckbox.setVisible( false );
-    mDrawBehindPlayerCheckbox.addActionListener( this );
+    addComponent( &mBlockModeOnlyAllowCheckbox );
+    mBlockModeOnlyAllowCheckbox.setVisible( false );
+    mBlockModeOnlyAllowCheckbox.addActionListener( this );
+
+    addComponent( &mBlockModCategoryIDField );
+    mBlockModCategoryIDField.setVisible( false );
 
     addComponent( &mFloorHuggingCheckbox );
     mFloorHuggingCheckbox.setVisible( false );
@@ -1076,6 +1087,8 @@ void EditorObjectPage::updateAgingPanel() {
         mRidingAnimationIndexField.setInt( -1 );
         mBlocksWalkingCheckbox.setVisible( false );
         mBlockModifierCheckbox.setVisible( false );
+        mBlockModeOnlyAllowCheckbox.setVisible( false );
+        mBlockModCategoryIDField.setVisible( false );
         
         if( mPickedObjectLayer != -1 ) {
             mAgingLayerCheckbox.setVisible( true );
@@ -1582,8 +1595,10 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
                    mBlocksWalkingCheckbox.getToggled(),
                    mLeftBlockingRadiusField.getInt(),
                    mRightBlockingRadiusField.getInt(),
-                   mBlockModifierCheckbox.getToggled(),
                    mDrawBehindPlayerCheckbox.getToggled(),
+                   mBlockModifierCheckbox.getToggled(),
+                   mBlockModeOnlyAllowCheckbox.getToggled(),
+                   mBlockModCategoryIDField.getInt(),
                    mCurrentObject.spriteBehindPlayer,
                    mCurrentObject.spriteAdditiveBlend,
                    biomes,
@@ -1762,8 +1777,10 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
                    mBlocksWalkingCheckbox.getToggled(),
                    mLeftBlockingRadiusField.getInt(),
                    mRightBlockingRadiusField.getInt(),
-                   mBlockModifierCheckbox.getToggled(),
                    mDrawBehindPlayerCheckbox.getToggled(),
+                   mBlockModifierCheckbox.getToggled(),
+                   mBlockModeOnlyAllowCheckbox.getToggled(),
+                   mBlockModCategoryIDField.getInt(),
                    mCurrentObject.spriteBehindPlayer,
                    mCurrentObject.spriteAdditiveBlend,
                    biomes,
@@ -2564,8 +2581,10 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
             mRightBlockingRadiusField.setVisible( false );
             mLeftBlockingRadiusField.setInt( 0 );
             mRightBlockingRadiusField.setInt( 0 );
-            mBlockModifierCheckbox.setToggled( false ),
             mDrawBehindPlayerCheckbox.setToggled( false );
+            mBlockModifierCheckbox.setToggled( false );
+            mBlockModeOnlyAllowCheckbox.setToggled( false );
+            mBlockModCategoryIDField.setInt( 0 );
             mFloorHuggingCheckbox.setToggled( false );
             mWallLayerCheckbox.setToggled( false );
             mFrontWallCheckbox.setToggled( false );
@@ -2586,6 +2605,15 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
         if( ! mLeftBlockingRadiusField.isVisible() ) {
             mLeftBlockingRadiusField.setInt( 0 );
             mRightBlockingRadiusField.setInt( 0 );
+            }
+        }
+    else if( inTarget == &mBlockModifierCheckbox ) {
+        mBlockModeOnlyAllowCheckbox.setVisible( false );
+        mBlockModCategoryIDField.setVisible( false );
+
+        if( mBlockModifierCheckbox.getToggled() ) {
+            mBlockModeOnlyAllowCheckbox.setVisible( true );
+            mBlockModCategoryIDField.setVisible( true );
             }
         }
     else if( inTarget == mCheckboxes[1] ) {
@@ -3535,6 +3563,18 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
             mRightBlockingRadiusField.setInt( pickedRecord->rightBlockingRadius );
 
             mBlockModifierCheckbox.setToggled( pickedRecord->blockModifier );
+
+            mBlockModeOnlyAllowCheckbox.setVisible( false );
+            mBlockModCategoryIDField.setVisible( false );
+
+            if( mBlockModifierCheckbox.getToggled() ) {
+                mBlockModeOnlyAllowCheckbox.setVisible( true );
+                mBlockModCategoryIDField.setVisible( true );
+                }
+            
+            mBlockModeOnlyAllowCheckbox.setToggled( pickedRecord->blockModeOnlyAllow );
+
+            mBlockModCategoryIDField.setInt( pickedRecord->blockModCategoryID );
             
             if( mBlocksWalkingCheckbox.getToggled() &&
                 mCheckboxes[1]->getToggled() ) {
@@ -4900,17 +4940,23 @@ void EditorObjectPage::draw( doublePair inViewCenter,
         pos.x -= checkboxSep;
         smallFont->drawString( "Blocking", pos, alignRight );
         }
+
+    if( mDrawBehindPlayerCheckbox.isVisible() ) {
+        pos = mDrawBehindPlayerCheckbox.getPosition();
+        pos.x -= checkboxSep;
+        smallFont->drawString( "Behind", pos, alignRight );
+        }
     
     if( mBlockModifierCheckbox.isVisible() ) {
         pos = mBlockModifierCheckbox.getPosition();
         pos.x -= checkboxSep;
         smallFont->drawString( "BlockMod", pos, alignRight );
         }
-
-    if( mDrawBehindPlayerCheckbox.isVisible() ) {
-        pos = mDrawBehindPlayerCheckbox.getPosition();
+    
+    if( mBlockModeOnlyAllowCheckbox.isVisible() ) {
+        pos = mBlockModeOnlyAllowCheckbox.getPosition();
         pos.x -= checkboxSep;
-        smallFont->drawString( "Behind", pos, alignRight );
+        smallFont->drawString( "OnlyAllow", pos, alignRight );
         }
 
     if( mFloorHuggingCheckbox.isVisible() ) {
