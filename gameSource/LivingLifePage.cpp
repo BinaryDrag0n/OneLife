@@ -3099,8 +3099,8 @@ void LivingLifePage::computePathToDest( LiveObject *inObject ) {
                 mapX >= 0 && mapX < mMapD ) { 
 
                 int mapI = mapY * mMapD + mapX;
-                
-                if( getObject( inObject->holdingID )->blockModifier == 0 ){
+
+                if( getObject( inObject->holdingID )->blockModifier == 0 || getObject( inObject->holdingID )->blockModeOnlyAllow != 1 ){
 
                     // note that unknowns (-1) count as blocked too
                     if( mMap[ mapI ] == 0
@@ -3112,14 +3112,16 @@ void LivingLifePage::computePathToDest( LiveObject *inObject ) {
                         }
                     }
                     
-                else {
-                    
-                    if( mMap[ mapI ] == 0
-                        ||
-                        ( mMap[ mapI ] != -1 && 
-                          mMap[ mapI ] != 6438 ) ) {
-                    
-                        blockedMap[ y * pathFindingD + x ] = false;
+                CategoryRecord *c = getCategory( getObject( inObject->holdingID )->blockModCategoryID );
+                if( getObject( inObject->holdingID )->blockModifier == 1 && c != NULL && c->objectIDSet.size() > 0 && ! c->isPattern ) {
+                    for (int i = 0; i < c->objectIDSet.size(); i++) {
+                        int itemID = c->objectIDSet.getElementDirect(i);
+
+                        if( mMap[ mapI ] != -1 && 
+                            mMap[ mapI ] == itemID ) {
+                        
+                            blockedMap[ y * pathFindingD + x ] = false;
+                            }
                         }
                     }
                 }
