@@ -6980,17 +6980,27 @@ unsigned char *getChunkMessage( int inStartX, int inStartY,
 //heldId is optional (used in blockModifier item property)
 char isMapSpotBlocking( int inX, int inY, int heldID) {
    
-    if ( heldID != 0){
-        if ( getObject( heldID )->blockModifier == 1 ){
+    if ( heldID != 0) {
+        if ( getObject( heldID )->blockModifier == 1 ) {
 
             int target = getMapObject( inX, inY );
+            CategoryRecord *c = getCategory( getObject( heldID )->blockModCategoryID );
 
-            //temp
-            if ( false ){
-                return true;
-                }
+            //make sure it is a valid category, else Blocking works like normal
+            if ( c != NULL && c->objectIDSet.size() > 0 && ! c->isPattern ) {
+                //check if target is an item which is removed from being blocking
+                for (int i = 0; i < c->objectIDSet.size(); i++) {
+                    int itemID = c->objectIDSet.getElementDirect(i);
 
-            return false;
+                    if ( target == itemID ) {
+                        return false;
+                        }
+                    }
+                //with "only allow mode" on everything else is blocking, otherwise apply normal blocking
+                if ( getObject( heldID )->blockModeOnlyAllow == 1 ) {
+                    return true; 
+                    }
+                } 
             }
         }
 
