@@ -476,8 +476,7 @@ typedef struct ObjectRecord {
         // optional offset to default contained position for an object
         // Code estimates an ideal contained position based on widest or lowest sprite,
         // but this produces weird results in some cases.
-        int containOffsetX;
-        int containOffsetY;
+        doublePair containOffset;
 
     } ObjectRecord;
 
@@ -620,8 +619,7 @@ int addObject( const char *inDescription,
                int inFoodValue,
                int inBonusValue,
                float inSpeedMult,
-               int inContainOffsetX,
-               int inContainOffsetY,
+               doublePair inContainOffset,
                doublePair inHeldOffset,
                char inClothing,
                doublePair inClothingOffset,

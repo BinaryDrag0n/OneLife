@@ -28,7 +28,8 @@ class DropdownList : public PageComponent, public ActionListenerList {
                    const char *inAllowedChars = NULL,
                    const char *inForbiddenChars = NULL,
                    // arbitrary, just about the max len for seed dropdown list in login page
-                   int inListLenDisplayed = 3 );
+                   int inListLenDisplayed = 3,
+                   char inDrawLabelWithShadow = false );
 
         virtual ~DropdownList();
 
@@ -283,6 +284,8 @@ class DropdownList : public PageComponent, public ActionListenerList {
         int mCursorFlashSteps;
         
         char mUsePasteShortcut;
+
+        char mDrawLabelWithShadow;
         
         void fixSelectionStartEnd();
 

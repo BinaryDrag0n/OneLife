@@ -63,6 +63,7 @@ class EditorCategoryPage : public GamePage, public ActionListener {
         
         CheckboxButton mIsPatternCheckbox;
         CheckboxButton mIsProbSetCheckbox;
+        CheckboxButton mIsContSetCheckbox;
 
         TextButton mMakeUniformButton;
 

@@ -1,5 +1,8 @@
 name: Release
 
+# Note: the following workflow is not representative of the current 2HOL build
+# process, where we rely on miniOneLifeCompile. It remains for forks that wish to make use of it.
+
 on:
   workflow_dispatch:
 

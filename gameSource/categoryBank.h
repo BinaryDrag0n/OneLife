@@ -16,6 +16,11 @@ typedef struct CategoryRecord {
         
         // true if this category is a set of probability-weighted objects
         char isProbabilitySet;
+
+        // true if this category is a set of objects inheriting the same +cont tag
+        // and there are weights associated with the objects to tell
+        // whether they are containers or containees 
+        char isContainabilitySet;
         
         // child objects that are in this category
         // none of these should themselves be parent objects
@@ -68,6 +73,7 @@ void removeObjectFromCategory( int inParentID, int inObjectID,
 
 void setCategoryIsPattern( int inParentID, char inIsPattern );
 void setCategoryIsProbabilitySet( int inParentID, char inIsProbabilitySet );
+void setCategoryIsContainabilitySet( int inParentID, char inIsContainabilitySet );
 
 
 
@@ -115,6 +121,8 @@ int pickFromProbSet( int inParentID );
 
 
 char isProbabilitySet( int inParentID );
+
+char isContainabilitySet( int inParentID );
 
 
 #endif

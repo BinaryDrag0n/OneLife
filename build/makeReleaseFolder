@@ -1,0 +1,218 @@
+#!/bin/sh
+
+#
+# Builds a complete, ready-to-ship game folder for one platform and zips it.
+#
+# Unlike makeDistributionWindows / makeDistributionMacOSX, this does not run
+# regenerateCaches.  Those caches are rebuilt by the game on first launch, and
+# regenerating them requires running a freshly built binary -- which is
+# impossible when cross-compiling for Windows on a Linux CI runner.
+#
+
+if [ $# -lt 2 ] ; then
+   echo "Usage: $0 release_name platform"
+   echo "  platform:  1 for GNU/Linux, 2 for MacOSX, 5 for Windows"
+   echo "  (same numbering as ./configure)"
+   echo
+   echo "Example: $0 v20326 1"
+   exit 1
+fi
+
+set -e
+
+cd "$(dirname "$0")"
+
+RELEASE_NAME=$1
+PLATFORM=$2
+
+case "$PLATFORM" in
+    1) PLATFORM_TAG="linux" ;;
+    2) PLATFORM_TAG="mac" ;;
+    5) PLATFORM_TAG="windows" ;;
+    *) echo "$0: unknown platform '$PLATFORM' (expected 1, 2 or 5)" ; exit 1 ;;
+esac
+
+# BSD sed's -i takes a mandatory argument, so use GNU sed on macOS.  Same
+# pattern miniOneLifeCompile/applyFixesAndOverride.sh uses.
+SED=sed
+if [ "$(uname -s)" = "Darwin" ] ; then SED=gsed ; fi
+
+# getDependencies.sh puts this alongside the repos, not inside them
+DISCORD_SDK_PATH=../../dependencies/discord_game_sdk
+
+FOLDER_NAME=2HOL_$RELEASE_NAME
+OUT_ROOT=release
+FOLDER=$OUT_ROOT/$FOLDER_NAME
+
+
+##### Assets, shared by every platform.
+# Also strips settings/email.ini and settings/accountKey.ini.
+./makeBaseDistributionFolder $RELEASE_NAME
+
+mkdir -p $OUT_ROOT
+rm -rf $FOLDER
+mv base/$FOLDER_NAME $OUT_ROOT/
+rmdir base
+
+d=`date`
+echo "$FOLDER_NAME built on $d" > $FOLDER/binary.txt
+
+
+##### Line endings.
+# Do this before any bundling, so that on mac it cannot invalidate the
+# signature by touching files inside the .app afterwards.
+if [ "$PLATFORM" = "5" ] ; then
+    # Windows wants CRLF.  unix2dos.c is the tiny converter already in this
+    # folder; drive it directly rather than through unix2dosScript, which
+    # depends on its own working directory.
+    g++ -o unix2dos unix2dos.c
+
+    find $FOLDER -name '*.txt' | while read -r f ; do
+        ./unix2dos < "$f" > "$f.dos"
+        mv -f "$f.dos" "$f"
+    done
+
+    rm -f unix2dos
+else
+    find $FOLDER -type f -name '*.txt' -exec $SED -i 's/\r//g' {} +
+fi
+
+
+##### Platform-specific payload
+
+if [ "$PLATFORM" = "1" ] ; then
+
+    cp ../gameSource/OneLife $FOLDER/
+
+    if [ -f $DISCORD_SDK_PATH/lib/x86_64/discord_game_sdk.so ] ; then
+        cp $DISCORD_SDK_PATH/lib/x86_64/discord_game_sdk.so $FOLDER/
+        chmod a+r $FOLDER/discord_game_sdk.so
+    fi
+
+fi
+
+
+if [ "$PLATFORM" = "5" ] ; then
+
+    cp ../gameSource/OneLife.exe $FOLDER/
+    cp win32/SDL.dll $FOLDER/
+    cp win32/clearCache.bat $FOLDER/
+
+    if [ -f $DISCORD_SDK_PATH/lib/x86/discord_game_sdk.dll ] ; then
+        cp $DISCORD_SDK_PATH/lib/x86/discord_game_sdk.dll $FOLDER/
+    fi
+
+fi
+
+
+if [ "$PLATFORM" = "2" ] ; then
+
+    # The .app sits inside the game folder rather than swallowing it, so the
+    # data folders stay visible next to it.  gameSDL.cpp chdirs to whatever
+    # folder the bundle is sitting in, so it finds them there.
+    BUNDLE=$FOLDER/$FOLDER_NAME.app
+
+    cp -R macOSX/OneLife.app $BUNDLE
+    cp ../gameSource/OneLife $BUNDLE/Contents/MacOS/
+
+    rm -f $BUNDLE/Contents/MacOS/empty.txt
+    rm -f $BUNDLE/Contents/Frameworks/empty.txt
+
+    # Bundle the Homebrew libraries the game links against (sdl12-compat and
+    # libpng) so the .app runs on a Mac with no Homebrew installed.
+    BREW_PREFIX=`brew --prefix 2>/dev/null || echo /usr/local`
+    GAME_BINARY=$BUNDLE/Contents/MacOS/OneLife
+
+    # Start from the game binary and follow each copied library's own
+    # dependencies, so nested Homebrew deps get bundled too.
+    FRAMEWORKS=$BUNDLE/Contents/Frameworks
+
+    targets=$GAME_BINARY
+
+    # sdl12-compat dlopens the next layer down instead of linking it, and so
+    # does sdl2-compat below it:
+    #
+    #   OneLife -> libSDL-1.2.0.dylib  (sdl12-compat, linked)
+    #                -> libSDL2-2.0.0.dylib  (sdl2-compat, dlopened)
+    #                     -> libSDL3.dylib   (dlopened)
+    #
+    # otool -L only ever reports the first hop, so the walk below cannot
+    # discover the other two and the bundle ships without them
+    # copy them in by hand, under exactly the names
+    # each loader searches for in @loader_path
+    for spec in "sdl2-compat sdl2 libSDL2-2.0.0.dylib" "sdl3 sdl3 libSDL3.dylib" ; do
+
+        set -- $spec
+        libName=$3
+
+        libPath=""
+        for formula in $1 $2 ; do
+            candidate=`brew --prefix $formula 2>/dev/null`/lib/$libName
+            if [ -f "$candidate" ] ; then libPath=$candidate ; break ; fi
+        done
+
+        # SDL3 is only in play when libSDL2 is itself sdl2-compat; a real
+        # SDL2 ends the chain, so a missing SDL3 is fine there.
+        if [ -z "$libPath" ] ; then
+            if [ "$libName" = "libSDL3.dylib" ] ; then continue ; fi
+            echo "$0: cannot find $libName -- is sdl2-compat installed?" >&2
+            exit 1
+        fi
+
+        cp -f $libPath $FRAMEWORKS/$libName
+
+        # brew installs these read-only
+        chmod u+w $FRAMEWORKS/$libName
+
+        install_name_tool -id @executable_path/../Frameworks/$libName \
+            $FRAMEWORKS/$libName
+
+        targets="$targets $FRAMEWORKS/$libName"
+    done
+
+    while [ -n "$targets" ] ; do
+
+        nextTargets=""
+
+        for target in $targets ; do
+
+            for lib in `otool -L $target | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/"` ; do
+
+                libName=`basename $lib`
+                bundledLib=$BUNDLE/Contents/Frameworks/$libName
+
+                if [ ! -f $bundledLib ] ; then
+                    cp -f $lib $bundledLib
+
+                    # brew installs these read-only
+                    chmod u+w $bundledLib
+
+                    install_name_tool -id @executable_path/../Frameworks/$libName \
+                        $bundledLib
+
+                    nextTargets="$nextTargets $bundledLib"
+                fi
+
+                install_name_tool -change $lib \
+                    @executable_path/../Frameworks/$libName $target
+            done
+        done
+
+        targets=$nextTargets
+    done
+
+    # This is only an ad-hoc signature, so anyone downloading the release still has to clear
+    # the quarantine flag:
+    #     xattr -dr com.apple.quarantine 2HOL_<version>.app
+    codesign --force --deep --sign - $BUNDLE
+
+fi
+
+
+##### Archive
+cd $OUT_ROOT
+rm -f ${FOLDER_NAME}_${PLATFORM_TAG}.zip
+zip -qr ${FOLDER_NAME}_${PLATFORM_TAG}.zip $FOLDER_NAME
+
+echo
+echo "Built $OUT_ROOT/${FOLDER_NAME}_${PLATFORM_TAG}.zip"

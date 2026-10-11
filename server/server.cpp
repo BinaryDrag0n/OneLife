@@ -5,7 +5,10 @@
 #include <assert.h>
 #include <float.h>
 #include <random>
+
 #include <string>
+#include <regex>
+#include <fstream>
 
 //  <time.h> added to add time stamps to recorded data
 #include <time.h>
@@ -213,6 +216,17 @@ static SimpleVector<char*> youGivingPhrases;
 static SimpleVector<char*> namedGivingPhrases;
 
 
+static std::string format_timestamp(double unix_ts) {
+    std::time_t raw_time = static_cast<std::time_t>(unix_ts);
+    std::tm* time_info = std::gmtime(&raw_time);
+
+    char buffer[20];
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", time_info);
+
+    return std::string(buffer);
+}
+
+
 // password-protected objects
 static SimpleVector<char*> passwordProtectingPhrases;
 
@@ -229,85 +243,13 @@ void restorePasswordRecord( int x, int y, unsigned char* passwordChars ) {
     passwordRecord r = { x, y, password };
     passwordRecords.push_back( r );
     }
-    
-//2HOL: <fstream>, <iostream> added to handle restoration of in-game passwords on server restart
-#include <fstream>
-#include <iostream>
-    
-void temp_passwordRecordTransfer() {
-    
-    SimpleVector<passwordRecord> temp_passwordRecords;
-    
-    // look through saved passwords and get ones that belong to the currently processed object kind
-    std::ifstream file;
-    file.open( "2HOL passwords.txt" );
-    if ( !file.is_open() ) return;
-    // parsing 2HOL passwords.txt, the expected format is "id:%i|x:%i|y:%i|word:%s"
-    for ( std::string line; std::getline(file, line); ) {
-        
-        if ( line.find("id:") == std::string::npos ) continue;
-        
-        // int posId = line.find("id:") + 3;
-        // int lenId = line.find("|", posId) - posId;
-        int posX = line.find("x:") + 2;
-        int lenX = line.find("|", posX) - posX;
-        int posY = line.find("y:") + 2;
-        int lenY = line.find("|", posY) - posY;
-        int posPw = line.find("word:") + 5;
-        
-        // int id = stoi(line.substr(posId, lenId));
-        int x = stoi(line.substr(posX, lenX));
-        int y = stoi(line.substr(posY, lenY));
-        std::string pw = line.substr(posPw, line.length());
-        
-        
-        // remove duplicated saved passwords
-        // so only the last row counts
-        for( int i=0; i<temp_passwordRecords.size(); i++ ) {
-            passwordRecord r = temp_passwordRecords.getElementDirect(i);
-            if ( x == r.x && y == r.y ) {
-                temp_passwordRecords.deleteElement(i);
-                break;
-                }
-            }
-        
-        // std::cout << "\nRestoring secret word for object with ID:" << inR->id;
-        
-        char* pwc = new char[48];
-        strcpy (pwc, pw.c_str());
-        
-        passwordRecord r = { x, y, pw };
-        
-        temp_passwordRecords.push_back( r );
-
-        }
-    file.close();
-    
-    for( int i=0; i<temp_passwordRecords.size(); i++ ) {
-        passwordRecord r = temp_passwordRecords.getElementDirect(i);
-        
-        int id = getMapObject( r.x, r.y );
-        ObjectRecord *o = getObject( id );
-        
-        int b = 0;
-        if( o->passwordProtectable ) b = 1;
-        
-        printf( " ========================= %d %d %d %d %s\n", b, id, r.x, r.y, r.password.c_str() );
-        
-        if( o == NULL ) continue;
-        if( !o->passwordProtectable ) continue;
-        
-        passwordRecords.push_back( r );
-        
-        persistentMapDBPut( r.x, r.y, 1, r.password.c_str() );
-        }
-    
-    }    
 
 
 static SimpleVector<char*> infertilityDeclaringPhrases;
 static SimpleVector<char*> fertilityDeclaringPhrases;
 
+
+static SimpleVector<char*> matchingPhrases;
 
 
 
@@ -320,7 +262,7 @@ static char *fertilitySuffix = NULL;
 // messages
 static char allowedSayCharMap[256];
 
-static const char *allowedSayChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.-,'?! ";
+static const char *allowedSayChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ.-,'?!/ 0123456789";
 
 
 static int killEmotionIndex = 2;
@@ -1764,6 +1706,10 @@ static void deleteMembers( FreshConnection *inConnection ) {
     if( inConnection->twinCode != NULL ) {
         delete [] inConnection->twinCode;
         }
+
+    if( inConnection->famTarget != NULL ) {
+        delete [] inConnection->famTarget;
+        }
     }
 
 
@@ -1961,6 +1907,8 @@ void quitCleanup() {
     
     // password-protected objects
     passwordProtectingPhrases.deallocateStringElements();
+
+    matchingPhrases.deallocateStringElements();
     
     if( curseYouPhrase != NULL ) {
         delete [] curseYouPhrase;
@@ -3104,6 +3052,18 @@ char getFemale( LiveObject *inPlayer ) {
 
 
 
+int getRace( LiveObject *inPlayer ) {
+    ObjectRecord *r = getObject( inPlayer->displayID );
+    
+    if( r == NULL ) {
+        return 0;
+        }
+    
+    return r->race;
+    }
+
+
+
 char isFertileAge( LiveObject *inPlayer ) {
     double age = computeAge( inPlayer );
                     
@@ -3441,7 +3401,14 @@ double computeMoveSpeed( LiveObject *inPlayer ) {
 
 
     // apply character's speed mult
-    speed *= getObject( inPlayer->displayID )->speedMult;
+    int speedMult = 1;
+    ObjectRecord *playerDisplayObject = getObject( inPlayer->displayID );
+    
+    if( playerDisplayObject != NULL ) {
+        speedMult = playerDisplayObject->speedMult;
+        }
+    
+    speed *= speedMult;
     
 
     char riding = false;
@@ -4639,6 +4606,65 @@ void checkCustomGlobalMessage() {
     }
 
 
+void checkCustomExecution() {
+    
+    char *content = 
+        SettingsManager::getSettingContents( "customExecution", 
+                                             "" );
+    if( strcmp( content, "" ) != 0 ) {
+
+        int numLines;
+        
+        char **lines = split( content, "\n", &numLines );
+
+        for( int i=0; i<numLines; i++ ) {
+
+            char inputBuff[100] = {0};
+            int mode = 0;
+            if( sscanf( lines[i], "%d %99[^\n]", &mode, inputBuff ) < 1 ) {
+                delete [] lines[i];
+                continue;
+                }
+
+            LiveObject *target = NULL;
+
+            try {
+                int pid = 0; 
+                if( mode == 0 ) pid = std::stoi(inputBuff);
+
+                for( int j = 0; j < players.size(); j++ ) {
+                    LiveObject *player = players.getElement( j );
+                    if( player == NULL ) continue;
+                    if( 
+                        (mode == 0 && player->id == pid) ||
+                        (mode == 1 && player->name != NULL && strcmp( player->name, inputBuff ) == 0) ||
+                        (mode == 2 && player->email != NULL && strcmp( player->email, inputBuff ) == 0)
+                    ) {
+                        target = player;
+                        break;
+                        }
+                    }
+                }
+            catch (...) {
+                }
+
+            if( target != NULL ) {
+                setDeathReason( target, "customExecution" );
+                target->error = true;
+                target->errorCauseString = "CustomExecution";
+                }
+
+            delete [] lines[i];
+            }
+        delete [] lines;
+
+        SettingsManager::setSetting( "customExecution", "" );
+        }
+    
+    delete [] content;
+    }
+
+
 
 
 
@@ -5740,7 +5766,13 @@ static void forceObjectToRead( LiveObject *inPlayer,
         
         if( !passToRead )
         if( p.x == inReadPos.x && p.y == inReadPos.y && Time::getCurrentTime() <= eta ){
-            return;
+
+            // allow clickToRead location speech for now
+            // clickToRead container feature needs this to work
+            // you could be reading different written objects at the same pos
+            // because they're sitting in a container
+
+            // return;
         }
         
         if( passToRead )
@@ -5757,6 +5789,42 @@ static void forceObjectToRead( LiveObject *inPlayer,
         //speech limit is ignored here
         char *quotedPhrase = autoSprintf( ":%s", metaData );
         
+        char *starLoc = 
+            strstr( quotedPhrase, " *map" );
+            
+        if( starLoc != NULL ) {
+            // make coords birth-relative
+            // to person reading map
+            int mapX, mapY;
+
+            // turn time into relative age in sec
+            timeSec_t mapT = 0;
+            
+            int numRead = 
+                sscanf( starLoc, 
+                        " *map %d %d %lf",
+                        &mapX, &mapY, &mapT );
+            if( numRead == 2 || numRead == 3 ) {
+                starLoc[0] = '\0';
+
+                timeSec_t age = 0;
+                
+                if( numRead == 3 ) {
+                    age = Time::timeSec() - mapT;
+                    }
+
+                char *newTrimmed = autoSprintf( 
+                    "%s *map %d %d %.f",
+                    quotedPhrase,
+                    mapX - inPlayer->birthPos.x, 
+                    mapY - inPlayer->birthPos.y,
+                    age );
+                
+                delete [] quotedPhrase;
+                quotedPhrase = newTrimmed;
+                }
+            }
+
         ChangePosition cp;
         cp.x = inReadPos.x;
         cp.y = inReadPos.y;
@@ -7477,6 +7545,9 @@ int processLoggedInPlayer( char inAllowReconnect,
 
     newObject.lastBabyEmail = NULL;
 
+    newObject.curseStatus = inCurseStatus;
+    newObject.lifeStats = inLifeStats;
+
     newObject.cravingFood = noCraving;
     newObject.cravingFoodYumIncrement = 0;
     newObject.cravingKnown = false;
@@ -7713,6 +7784,11 @@ int processLoggedInPlayer( char inAllowReconnect,
     
 
 
+    if( connection->hashedSpawnSeed != 0 && SettingsManager::getIntSetting( "forceEveOnSeededSpawn", 0 ) ) {
+        parentChoices.deleteAll();
+        numBirthLocationsCurseBlocked = 0;
+        }
+    
     if( parentChoices.size() == 0 && numBirthLocationsCurseBlocked > 0 ) {
         // they are blocked from being born EVERYWHERE by curses
 
@@ -7723,6 +7799,8 @@ int processLoggedInPlayer( char inAllowReconnect,
         // d-town
         inCurseStatus.curseLevel = 1;
         inCurseStatus.excessPoints = 1;
+        newObject.curseStatus.curseLevel = 1;
+        newObject.curseStatus.excessPoints = 1;
         }
 
     
@@ -7766,10 +7844,6 @@ int processLoggedInPlayer( char inAllowReconnect,
         if( forceSpawn ) {
             parentChoices.deleteAll();
             }
-        }
-        
-    if( connection->hashedSpawnSeed != 0 && SettingsManager::getIntSetting( "forceEveOnSeededSpawn", 0 ) ) {
-        parentChoices.deleteAll();
         }
 
 
@@ -8036,16 +8110,16 @@ int processLoggedInPlayer( char inAllowReconnect,
             // set cool-down time before this worman can have another baby
             parent->birthCoolDown = pickBirthCooldownSeconds() + curTime;
 
-            ObjectRecord *parentObject = getObject( parent->displayID );
-
+            int parentRace = getRace( parent );
+            
             // pick race of child
-            int numRaces;
+            int numRaces = 0;
             int *races = getRaces( &numRaces );
         
             int parentRaceIndex = -1;
             
             for( int i=0; i<numRaces; i++ ) {
-                if( parentObject->race == races[i] ) {
+                if( parentRace == races[i] ) {
                     parentRaceIndex = i;
                     break;
                     }
@@ -8054,11 +8128,11 @@ int processLoggedInPlayer( char inAllowReconnect,
 
             if( parentRaceIndex != -1 ) {
                 
-                int childRace = parentObject->race;
+                int childRace = parentRace;
                 
                 char forceDifferentRace = false;
 
-                if( getRaceSize( parentObject->race ) < 3 ) {
+                if( getRaceSize( parentRace ) < 3 ) {
                     // no room in race for diverse family members
                     
                     // pick a different race for child to ensure village 
@@ -8100,7 +8174,7 @@ int processLoggedInPlayer( char inAllowReconnect,
                     childRace = races[ childRaceIndex ];
                     }
                 
-                if( childRace == parentObject->race ) {
+                if( childRace == parentRace ) {
                     
                     if( countYoungFemalesInLineage( parent->lineageEveID ) <
                         SettingsManager::getIntSetting( "minYoungFemalesToForceGirl", 2 ) ) {
@@ -8108,7 +8182,7 @@ int processLoggedInPlayer( char inAllowReconnect,
                         }
                     
                     newObject.displayID = getRandomFamilyMember( 
-                        parentObject->race, parent->displayID, familySpan,
+                        parentRace, parent->displayID, familySpan,
                         forceGirl );
                     }
                 else {
@@ -8334,10 +8408,10 @@ int processLoggedInPlayer( char inAllowReconnect,
             }
         }
     
-    if ( SettingsManager::getIntSetting( "randomisePlayersObject", 0 ) ) {
+    if ( inForceDisplayID == -1 && SettingsManager::getIntSetting( "randomisePlayersObject", 0 ) ) {
         SimpleVector<int> *objectsPool =
             SettingsManager::getIntSettingMulti( "randomisePlayersObjectPool" );
-        ObjectRecord *randomObject;
+        ObjectRecord *randomObject = NULL;
         int randomObjectIndex;
         int objectPoolSize = objectsPool->size();
         while ( randomObject == NULL ) {
@@ -8426,8 +8500,6 @@ int processLoggedInPlayer( char inAllowReconnect,
     
     newObject.nameHasSuffix = false;
     newObject.lastSay = NULL;
-    newObject.curseStatus = inCurseStatus;
-    newObject.lifeStats = inLifeStats;
     
     // password-protected objects
     newObject.saidPassword = NULL;
@@ -8850,7 +8922,7 @@ int processLoggedInPlayer( char inAllowReconnect,
               newObject.parentID,
               parentEmail,
               ! getFemale( &newObject ),
-              getObject( newObject.displayID )->race, 
+              getRace( &newObject ), 
               newObject.xd,
               newObject.yd,
               players.size(),
@@ -8939,6 +9011,14 @@ static void processWaitingTwinConnection( FreshConnection inConnection ) {
                 if( inConnection.ipAddress != NULL ) {
                     delete [] inConnection.ipAddress;
                     inConnection.twinCode = NULL;
+                    }
+                if( inConnection.email != NULL ) {
+                    delete [] inConnection.email;
+                    inConnection.email = NULL;
+                    }
+                if( inConnection.famTarget != NULL ) {
+                    delete [] inConnection.famTarget;
+                    inConnection.famTarget = NULL;
                     }
                 nextLogInTwin = false;
                 return;
@@ -9150,6 +9230,11 @@ static void processWaitingTwinConnection( FreshConnection inConnection ) {
                 if( nextConnection->ipAddress != NULL ) {
                     delete [] nextConnection->ipAddress;
                     nextConnection->ipAddress = NULL;
+                    }
+
+                if( nextConnection->famTarget != NULL ) {
+                    delete [] nextConnection->famTarget;
+                    nextConnection->famTarget = NULL;
                     }
 
                 waitingForTwinConnections.deleteElement( i );                
@@ -9473,6 +9558,10 @@ static void changeContained( int inX, int inY, int inSlotNumber,
 // check whether container has slots, containability, size and tags
 // whether container has empty slot is checked elsewhere
 char containmentPermitted( int inContainerID, int inContainedID ) {
+
+    // separate object ID from meta ID, in case the objects contain meta data
+    inContainerID = extractObjectID(inContainerID);
+    inContainedID = extractObjectID(inContainedID);
     
     // Use the container's and object's dummy parents to judge
     // So use objects also inherit the cont tag
@@ -9507,8 +9596,29 @@ char containmentPermitted( int inContainerID, int inContainedID ) {
                 CategoryRecord *containedCategory = getCategory( containedCID );
                 if( containedCategory == NULL ) continue;
                 int containedPID = containedCategory->parentID;
-                
-                if( isContainmentWithMatchedTags( containerPID, containedPID ) ) return true;
+
+                if( isContainmentWithMatchedTags( containerPID, containedPID ) ) {
+
+                    // in case either category is a containabilitySet
+                    // check that the role of the object in that set matches
+                    // what we have here
+
+                    char isContainer = true;
+                    char isContainee = true;
+
+                    if( containerCategory->isContainabilitySet ) {
+                        int containerIndex = containerCategory->objectIDSet.getElementIndex( inContainerID );
+                        float containerWeight = containerCategory->objectWeights.getElementDirect( containerIndex );
+                        isContainer = containerWeight == 1.0f;
+                    }
+                    if( containedCategory->isContainabilitySet ) {
+                        int containeeIndex = containedCategory->objectIDSet.getElementIndex( inContainedID );
+                        float containeeWeight = containedCategory->objectWeights.getElementDirect( containeeIndex );
+                        isContainee = containeeWeight == 0.0f;
+                    }
+
+                    if( isContainer && isContainee ) return true;
+                }
             }
         }
     } else if ( containerRecord != NULL ) {
@@ -9826,6 +9936,7 @@ static char addHeldToContainer( LiveObject *inPlayer,
         if( contTrans != NULL ) {
             setResponsiblePlayer( -inPlayer->id );
             if( contTrans->newTarget != target ) setMapObject( inContX, inContY, contTrans->newTarget );
+            setResponsiblePlayer( -1 );
         }
 
         return true;
@@ -9873,6 +9984,29 @@ char removeFromContainerToHold( LiveObject *inPlayer,
         if( target != 0 ) {
                             
             if( target > 0 && getObject( target )->slotsLocked ) {
+
+                if( inSlotNumber >= 0 && // a slot number is specified
+                    getObject( target )->clickToRead &&
+                    strstr( getObject( target )->description, "+useOnContained" ) != NULL
+                ) {
+                    // clickToRead container
+                    // to read written objects contained
+
+                    // target container needs to be:
+                    // 1) clickToRead - not technically required but it makes more sense
+                    // 2) useOnContained - required for USE, when you're holding something;
+                    //                     otherwise client won't send out a slot number
+                    // 3) slotsLocked - required for REMV, when your hands are empty;
+                    //                  otherwise you'd remove the object to hold
+
+                    int contID = getContained( inContX, inContY, inSlotNumber );
+
+                    // we don't need to check if contID contains meta data
+                    // the function will do the checking
+                    forceObjectToRead( inPlayer, contID, {inContX, inContY}, false );
+                    }
+                
+
                 return false;
                 }
 
@@ -11446,7 +11580,7 @@ char *getUniqueCursableName( char *inPlayerName, char *outSuffixAdded,
             }
         
 
-        return inPlayerName;
+        if( !dup ) return inPlayerName;
         }    
     
     
@@ -11583,6 +11717,19 @@ char *getUniqueCursableName( char *inPlayerName, char *outSuffixAdded,
                             }
                         }
                     
+                    if( ! dup ) {
+                        // not used by any living family
+                        // however, was this a recent EVE last name
+                        // that is still cursable?
+                        
+                        char *testName = autoSprintf( "EVE %s", tempLastName );
+                        
+                        dup = isNameDuplicateForCurses( testName );
+                        
+                        delete [] testName;
+                        }
+                    
+
                     if( dup ) {
                         i = nextI;
                         }
@@ -13402,8 +13549,6 @@ int main() {
     readPhrases( "infertilityDeclaringPhrases", &infertilityDeclaringPhrases );
     readPhrases( "fertilityDeclaringPhrases", &fertilityDeclaringPhrases );
 
-    eveName = 
-        SettingsManager::getStringSetting( "eveName", "EVE" );
     infertilitySuffix = 
         SettingsManager::getStringSetting( "infertilitySuffix", "+INFERTILE+" );
     fertilitySuffix = 
@@ -13837,6 +13982,8 @@ int main() {
 
             
             checkCustomGlobalMessage();
+
+            checkCustomExecution();
             
 
             int lowestCravingID = INT_MAX;
@@ -13866,6 +14013,26 @@ int main() {
                     }
                 }
             purgeStaleCravings( lowestCravingID );
+
+            matchingPhrases.deallocateStringElements();
+
+            char *cont = SettingsManager::getSettingContents( "matchingPhrases", "" );
+            
+            if( strcmp( cont, "" ) != 0 ) {
+                int numParts;
+                char **parts = split( cont, "\n", &numParts );
+                
+                
+                for( int i=0; i<numParts; i++ ) {
+                    if( strcmp( parts[i], "" ) != 0 ) {
+                        matchingPhrases.push_back( stringDuplicate(parts[i]) );
+                        }
+                    delete [] parts[i];
+                    }
+                delete [] parts;
+                }
+            delete [] cont;
+
             }
         
         
@@ -14497,6 +14664,11 @@ int main() {
                             // we need to notify them about the famTarget failure
                             removeConnectionFromList = false;
                             }
+                        else if( nextConnection->famTarget != NULL ) {
+                            // connection struct is dropped from list below
+                            delete [] nextConnection->famTarget;
+                            nextConnection->famTarget = NULL;
+                            }
                         }
                                                         
                     if( removeConnectionFromList ) {
@@ -14690,7 +14862,7 @@ int main() {
                             tokens->size() == 7 ) {
                             
                             nextConnection->email = 
-                                stringToLowerCase( 
+                                stringDuplicate( 
                                     tokens->getElementDirect( 1 ) );
 
 
@@ -14723,6 +14895,7 @@ int main() {
                                 // Remove seed from email
                                 if( seedDelimPos == 0) {
                                     // There was only a seed not email
+                                    delete[] nextConnection->email;
                                     nextConnection->email = stringDuplicate( "blank_email" );
                                 } else {
                                     std::string onlyEmail { emailAndSeed.substr( 0, seedDelimPos ) };
@@ -14752,6 +14925,7 @@ int main() {
                                     // Remove famTarget from email
                                     if( famTargetDelimPos == 0 ) {
                                         // There was only a famTarget not email
+                                        delete[] nextConnection->email;
                                         nextConnection->email = stringDuplicate( "blank_email" );
                                     } else {
                                         std::string onlyEmail { emailAndFamTarget.substr( 0, famTargetDelimPos ) };
@@ -14763,6 +14937,12 @@ int main() {
                                     nextConnection->famTarget = NULL;
                                 }
                             }
+
+                            char *lowerEmail =
+                                stringToLowerCase( 
+                                    nextConnection->email );
+                            delete [] nextConnection->email;
+                            nextConnection->email = lowerEmail;
 
                             char *pwHash = tokens->getElementDirect( 2 );
                             char *keyHash = tokens->getElementDirect( 3 );
@@ -14948,6 +15128,11 @@ int main() {
                                             // Do not remove this connection
                                             // we need to notify them about the famTarget failure
                                             removeConnectionFromList = false;
+                                            }
+                                        else if( nextConnection->famTarget != NULL ) {
+                                            // connection struct is dropped from list below
+                                            delete [] nextConnection->famTarget;
+                                            nextConnection->famTarget = NULL;
                                             }
                                         }
                                                                         
@@ -16434,7 +16619,7 @@ int main() {
                                 const char *name;
                                 
                                 if( nextPlayer->name == NULL ) {
-                                    name = "UNKNOWN";
+                                    name = "AN UNKNOWN PHOTOGRAPHER";
                                     }
                                 else {
                                     name = nextPlayer->name;
@@ -16442,7 +16627,7 @@ int main() {
                                 
 
                                 char *textToAdd = autoSprintf( 
-                                    "A PHOTO BY %s *photo %s",
+                                    "TAKEN BY %s *photo %s",
                                     name, m.photoIDString );
                                 
                                 
@@ -17220,7 +17405,29 @@ int main() {
                         
                         delete [] m.saidText;
                         m.saidText = cleanedString;
-                        
+
+
+                        bool matched = false;
+
+                        for( int i=0; i<matchingPhrases.size(); i++ ) {
+                            char *matchingPhrase = matchingPhrases.getElementDirect( i );
+                            std::regex re( matchingPhrase );
+                            if (std::regex_search(m.saidText, re)) {
+                                matched = true;
+
+                                std::ofstream ofs( "matchingLog.txt", std::ios_base::app);
+                                std::string timeString = format_timestamp( Time::getCurrentTime() );
+                                ofs << timeString;
+                                ofs << " ";
+                                ofs << autoSprintf( "%d", nextPlayer->id );
+                                ofs << " ";
+                                ofs << autoSprintf( "%s", m.saidText );
+                                ofs << std::endl;
+                                ofs.close();
+
+                                }
+
+                            }
                         
                         if( nextPlayer->ownedPositions.size() > 0 ) {
                             // consider phrases that assign ownership
@@ -17468,6 +17675,7 @@ int main() {
                             unsigned char metaData[ MAP_METADATA_LENGTH ];
                             int len = strlen( m.saidText );
                             
+                            if( strcmp( m.saidText, "" ) != 0 && !matched )
                             if( nextPlayer->holdingID > 0 &&
                                 len < MAP_METADATA_LENGTH &&
                                 getObject( 
@@ -17566,7 +17774,7 @@ int main() {
                         char *cleanSay = trimWhitespace( m.saidText );
                         
                         if( strcmp( cleanSay, "" ) != 0 ) {
-                            makePlayerSay( nextPlayer, cleanSay );
+                            makePlayerSay( nextPlayer, cleanSay, matched );
                             }
                         delete [] cleanSay;
                         }
@@ -17764,6 +17972,8 @@ int main() {
                                     // no longer track embedded weapon
                                     nextPlayer->embeddedWeaponID = 0;
                                     nextPlayer->embeddedWeaponEtaDecay = 0;
+                                    
+                                    setResponsiblePlayer( nextPlayer->id );
                                     
                                     setMapObject( m.x, m.y,
                                                   healTrans->newTarget );
@@ -18206,16 +18416,21 @@ int main() {
                                 if( r != NULL &&
                                     r->newTarget > 0 &&
                                     r->newTarget != target ) {
+
+                                    int floorID = getMapFloor( m.x, m.y );
                                     
                                     // target would change here
-                                    if( getMapFloor( m.x, m.y ) != 0 ) {
+                                    if( floorID != 0 ) {
                                         // floor present
                                         
                                         // make sure new target allowed 
                                         // to exist on floor
                                         if( strstr( getObject( r->newTarget )->
                                                     description, 
-                                                    "groundOnly" ) != NULL ) {
+                                                    "groundOnly" ) != NULL &&
+                                            strstr( getObject( floorID )->description, 
+                                                    "groundLikeFloor" ) == NULL
+                                                 ) {
                                             r = NULL;
                                             }
                                         }
@@ -18644,12 +18859,29 @@ int main() {
                                 else if( nextPlayer->holdingID >= 0 ) {
                                     
                                     char handled = false;
-                                    
-                                    if( m.i != -1 && targetObj->permanent &&
+
+                                    char validUseOnContainedRequest = 
+                                        m.i != -1 && targetObj->permanent &&
                                         targetObj->numSlots > m.i &&
                                         getNumContained( m.x, m.y ) > m.i &&
                                         strstr( targetObj->description,
-                                                "+useOnContained" ) != NULL ) {
+                                                "+useOnContained" ) != NULL;
+                                        
+                                    if( validUseOnContainedRequest && 
+                                        targetObj->slotsLocked &&
+                                        targetObj->clickToRead
+                                    ) {
+                                        // clickToRead container
+                                        // to read written objects contained
+
+                                        int contID = getContained( m.x, m.y, m.i );
+                                        forceObjectToRead( nextPlayer, contID, {m.x, m.y}, false );
+
+                                        // if slotsLocked, don't allow useOnContained
+                                        handled = true;
+                                        }
+                                    
+                                    if( !handled && validUseOnContainedRequest ) {
                                         // a valid slot specified to use
                                         // held object on.
                                         // AND container allows this
@@ -18950,7 +19182,6 @@ int main() {
                                             if( containmentTrans != NULL ) {
                                                 int newContainerID = containmentTrans->newTarget;
                                                 if( isOutContTrans ) newContainerID = containmentTrans->newActor;
-                                                if( containmentTrans == NULL ) setResponsiblePlayer( -1 );
                                                 setMapObject( m.x, m.y, newContainerID );
                                                 }                     
                                             
@@ -19193,7 +19424,9 @@ int main() {
                                             strstr( newTargetObj->description, 
                                                     "groundOnly" ) != NULL
                                             &&
-                                            getMapFloor( m.x, m.y ) != 0 ) {
+                                            getMapFloor( m.x, m.y ) != 0 &&
+                                            strstr( getObject( getMapFloor( m.x, m.y ) )->description, 
+                                                    "groundLikeFloor" ) == NULL ) {
                                             // floor present
                                         
                                             // new target not allowed 
@@ -19309,10 +19542,7 @@ int main() {
                                                 }
                                             handleHoldingChange( nextPlayer,
                                                                  r->newActor );
-                                            
-                                            setHeldGraveOrigin( nextPlayer, 
-                                                                m.x, m.y,
-                                                                resultID );
+                                                                 
                                             }
                                         else {
                                             // changing floor to non-floor
@@ -19332,9 +19562,7 @@ int main() {
                                                 handleHoldingChange( 
                                                     nextPlayer,
                                                     r->newActor );
-                                                setHeldGraveOrigin( nextPlayer, 
-                                                                    m.x, m.y,
-                                                                    resultID );
+
                                                 }
                                             }
                                         }
@@ -19705,6 +19933,32 @@ int main() {
                                     targetPlayer->embeddedWeaponID = 0;
                                     targetPlayer->embeddedWeaponEtaDecay = 0;
                                     
+                                    // check if this new wound would leave
+                                    // something embedded in grave
+                                    TransRecord *newWoundEmbed = 
+                                        getPTrans( targetPlayer->holdingID,
+                                                   0, false, false ); 
+                                    
+                                    if( newWoundEmbed != NULL &&
+                                        newWoundEmbed->newTarget > 0 ) {
+                                        
+                                        targetPlayer->embeddedWeaponID = 
+                                            newWoundEmbed->newTarget;
+                                        TransRecord *newDecayT = 
+                                            getMetaTrans( 
+                                                -1, 
+                                                newWoundEmbed->newTarget );
+                    
+                                        if( newDecayT != NULL ) {
+                                            targetPlayer->
+                                                embeddedWeaponEtaDecay = 
+                                                Time::timeSec() + 
+                                                newDecayT->
+                                                autoDecaySeconds;
+                                            }
+                                        }
+                                    
+
                                     
                                     nextPlayer->holdingID = 
                                         healTrans->newActor;
@@ -19804,8 +20058,6 @@ int main() {
                                         m.i,
                                         getObject( 
                                             healTrans->newTarget ) );
-                                    
-                                    setResponsiblePlayer( -1 );
                                     
                                     healed = true;
                                     healTarget = healTrans->target;
@@ -21202,6 +21454,7 @@ int main() {
                     logDeath( nextPlayer->id,
                               nextPlayer->email,
                               nextPlayer->isEve,
+                              nextPlayer->name,
                               computeAge( nextPlayer ),
                               getSecondsPlayed( 
                                   nextPlayer ),
@@ -21502,6 +21755,7 @@ int main() {
                         logDeath( nextPlayer->id,
                                   nextPlayer->email,
                                   nextPlayer->isEve,
+                                  nextPlayer->name,
                                   age,
                                   getSecondsPlayed( nextPlayer ),
                                   male,
@@ -22622,6 +22876,7 @@ int main() {
                             logDeath( decrementedPlayer->id,
                                       decrementedPlayer->email,
                                       decrementedPlayer->isEve,
+                                      decrementedPlayer->name,
                                       computeAge( decrementedPlayer ),
                                       getSecondsPlayed( decrementedPlayer ),
                                       ! getFemale( decrementedPlayer ),
@@ -24834,6 +25089,21 @@ int main() {
                                             }
                                         }
                                     }
+
+                                
+                                // any other * metadata before *map?
+                                char *otherStarLoc = strstr( trimmedPhrase,
+                                                             " *" );
+                                if( otherStarLoc != NULL ) {
+                                    if( speakerID != listenerID ) {
+                                        // only send * metadata through
+                                        // to speaker
+                                        // trim it otherwise
+                                        
+                                        otherStarLoc[0] = '\0';
+                                        }
+                                    }
+                                
 
                                 
                                 char *translatedPhrase;

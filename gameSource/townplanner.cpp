@@ -550,12 +550,12 @@ void initFrameDrawer( int inWidth, int inHeight, int inTargetFrameRate,
     mapSizeY = SettingsManager::getIntSetting( "townPlannerMapSizeY", 400 );
     initCenterX = SettingsManager::getIntSetting( "townPlannerMapInitCenterX", int(mapSizeX / 2) );
     initCenterY = SettingsManager::getIntSetting( "townPlannerMapInitCenterY", int(mapSizeY / 2) );
-    if( mapSizeX < 0 ) mapSizeX = 400;
-    if( mapSizeY < 0 ) mapSizeY = 400;
+    if( mapSizeX <= 0 ) mapSizeX = 400;
+    if( mapSizeY <= 0 ) mapSizeY = 400;
     if( mapSizeX > 800 ) mapSizeX = 800;
     if( mapSizeY > 800 ) mapSizeY = 800;
-    if( initCenterX >= mapSizeX || initCenterX < 0 ) initCenterX = int(mapSizeX / 2);
-    if( initCenterY >= mapSizeY || initCenterY < 0 ) initCenterY = int(mapSizeY / 2);
+    if( initCenterX > mapSizeX || initCenterX < 0 ) initCenterX = int(mapSizeX / 2);
+    if( initCenterY > mapSizeY || initCenterY < 0 ) initCenterY = int(mapSizeY / 2);
     
 
     // importPage = new EditorImportPage;
@@ -1737,7 +1737,11 @@ void specialKeyUp( int inKey ) {
     if( currentGamePage != NULL ) {
         currentGamePage->base_specialKeyUp( inKey );
         }
-    } 
+    }
+
+void unmodifiedKeyDown( unsigned char inASCII ) {}
+void unmodifiedKeyUp( unsigned char inASCII ) {}
+ 
 
 
 

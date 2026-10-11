@@ -62,7 +62,7 @@ extern char loginEditOverride;
 
 
 ExistingAccountPage::ExistingAccountPage()
-        : mBackground( "background.tga", 0.75f ),
+        : mBackground( "background.tga", 0.60f ),
           mGameLogo( "logo.tga", 1.0f, {-360, 256} ),
 
           // Left Pane Page 0
@@ -72,14 +72,14 @@ ExistingAccountPage::ExistingAccountPage()
                        // forbid only spaces and backslash and 
                        // single/double quotes 
                        // also pipe and colon, reserved as separators for spawn code and family name target
-                       "\"' \\|:#" ),
+                       "\"' \\|:#", true ),
           mEmailLockButton( mainFont, -108, 96, "!" ),
           mPasteEmailButton( mainFont, 0, 68, translate( "paste" ) ),
                        
           mKeyField( mainFont, -360, 0, 15, true,
                      translate( "accountKey" ),
                      // allow only ticket code characters
-                     "23456789ABCDEFGHJKLMNPQRSTUVWXYZ-" ),
+                     "23456789ABCDEFGHJKLMNPQRSTUVWXYZ-", NULL, true ),
           mKeyLockButton( mainFont, -108, 0, "!" ),
           mPasteButton( mainFont, 0, -112, translate( "paste" ) ),
           
@@ -91,7 +91,7 @@ ExistingAccountPage::ExistingAccountPage()
           mTwinCodeField( mainFont, -360, 16, 10, false, 
                                      translate( "twinCode" ),
                                      NULL,
-                                     NULL ),
+                                     NULL, true ),
           mGenerateButton( mainFont, 0, 0, translate( "generate" ) ),
           mTwinCodeCopyButton( mainFont, 0, 0, translate( "copy" ) ),
           mTwinCodePasteButton( mainFont, 0, 0, translate( "paste" ) ),
@@ -102,12 +102,12 @@ ExistingAccountPage::ExistingAccountPage()
                                      "SPAWN CODE:",
                                      NULL,
                                      // forbid spaces and hash
-                                     " #" ),
+                                     " #", 3, true ),
           mSpawnSeedLockButton( mainFont, -108, -176, "!" ),
           mTargetFamily( mainFont, -360, -176, 10, true, 
                                      "TARGET FAMILY NAME:",
                                      // allow only alphabets
-                                     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+                                     "ABCDEFGHIJKLMNOPQRSTUVWXYZ", NULL, true),
           
           mBackToAccountTabButton( mainFont, 0, 0, "BACK" ),
           mLoginButton( mainFont, 0, 0, "PLAY" ),
@@ -146,6 +146,7 @@ ExistingAccountPage::ExistingAccountPage()
     mKeyField.usePasteShortcut(true);
     mTwinCodeField.setWidth( 360 );
     mSpawnSeed.setWidth( 360 );
+    mSpawnSeed.usePasteShortcut(true);
     mTargetFamily.setWidth( 360 );
     
     mFriendsButton.setSize( 175, 60 );
@@ -193,7 +194,7 @@ ExistingAccountPage::ExistingAccountPage()
     mPlayerCountRadioButtonSet = 
         new RadioButtonSet( mainFont, 0, 0,
                             3, choiceList,
-                            true, 4 );
+                            true, 4, true );
     
     
     mPlayerCountRadioButtonSet->setPosition(
@@ -208,7 +209,7 @@ ExistingAccountPage::ExistingAccountPage()
     mSeedOrFamilyButtonSet = 
         new RadioButtonSet( mainFont, 0, 0,
                             2, specifySpawnChoiceList,
-                            true, 4 );
+                            true, 4, true );
     
     
     mSeedOrFamilyButtonSet->setPosition(
@@ -966,7 +967,6 @@ void ExistingAccountPage::pointerUp( float inX, float inY ) {
         }
     if( mSpawnSeed.isVisible() && !mSpawnSeed.isMouseOver() ) {
         if( !seedUIElementsClicked ) { // NOT unlock button clicked
-            seedFieldLockedMode = 0;
             mSpawnSeed.unfocus();
             updatefieldsAndLockButtons();
             }
@@ -1356,6 +1356,8 @@ void ExistingAccountPage::actionPerformed( GUIComponent *inTarget ) {
         
     }
 
+void drawTextWithShadow( const char *text, doublePair pos, TextAlignment alignment );
+
 
 
 void ExistingAccountPage::nextPage() {
@@ -1590,14 +1592,14 @@ void ExistingAccountPage::draw( doublePair inViewCenter,
             pos.x = mEmailField.getLeftEdgeX() + mainFont->getFontHeight() * 0.25 * 0.5;
             pos.y += 30 + 16;
             setDrawColor( 1, 1, 1, 1.0 );
-            if( mSpecificButton.isVisible() ) mainFont->drawString( "WHERE TO SPAWN?", pos, alignLeft );
+            if( mSpecificButton.isVisible() ) drawTextWithShadow( "WHERE TO SPAWN?", pos, alignLeft );
             }
         
         pos = mFriendsButton.getPosition();
         pos.x = mEmailField.getLeftEdgeX() + mainFont->getFontHeight() * 0.25 * 0.5;
         pos.y += 30 + 16;
         setDrawColor( 1, 1, 1, 1.0 );
-        if( mFriendsButton.isVisible() ) mainFont->drawString( "PLAY WITH FRIENDS?", pos, alignLeft );        
+        if( mFriendsButton.isVisible() ) drawTextWithShadow( "PLAY WITH FRIENDS?", pos, alignLeft );
         }
 
 

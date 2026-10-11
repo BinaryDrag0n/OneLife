@@ -28,7 +28,8 @@ DropdownList::DropdownList( Font *inDisplayFont,
                       const char *inLabelText,
                       const char *inAllowedChars,
                       const char *inForbiddenChars,
-                      int inListLenDisplayed )
+                      int inListLenDisplayed,
+                      char inDrawLabelWithShadow )
         : PageComponent( inX, inY ),
           mActive( true ),
           mContentsHidden( false ),
@@ -67,7 +68,8 @@ DropdownList::DropdownList( Font *inDisplayFont,
           mSelectionEnd( -1 ),
           mShiftPlusArrowsCanSelect( false ),
           mCursorFlashSteps( 0 ),
-          mUsePasteShortcut( false ) {
+          mUsePasteShortcut( false ),
+          mDrawLabelWithShadow( inDrawLabelWithShadow ) {
     
     if( inLabelText != NULL ) {
         mLabelText = stringDuplicate( inLabelText );
@@ -535,6 +537,13 @@ void DropdownList::draw() {
             }
         
         doublePair labelPos = { xPos, yPos };
+
+        if( mDrawLabelWithShadow ) {
+            setDrawColor( 0, 0, 0, 1 );
+            doublePair shadowOffset = {-2, 2};
+            mFont->drawString( mLabelText, add(labelPos, shadowOffset), a );
+            setDrawColor( 1, 1, 1, 1 );
+            }
         
         mFont->drawString( mLabelText, labelPos, a );
         }

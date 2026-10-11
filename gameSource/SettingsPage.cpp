@@ -29,7 +29,12 @@ extern int targetFramesPerSecond;
 
 extern bool showingInGameSettings;
 
+extern doublePair lastScreenViewCenter;
+extern double viewWidth;
+
+extern float gui_fov_scale_before_settings;
 extern float gui_fov_target_scale_hud;
+extern float fovMax;
 
 // defined in LivingLifePage.cpp
 extern bool showUseOnHoverEnabled;
@@ -53,7 +58,7 @@ time_t last_discord_setting_change = 0;
 #endif // USE_DISCORD
 
 SettingsPage::SettingsPage()
-        : mBackground( "background.tga", 0.75f ),
+        : mBackground( "background.tga", 0.60f ),
           
           // Left Pane
           mRestartButton( mainFont, 360, -272, translate( "restartButton" ) ),
@@ -73,6 +78,9 @@ SettingsPage::SettingsPage()
 
           // Gameplay
           mEnableFOVBox( 561, 128, 4 ),
+          mFOVSlider( mainFont, 601, 128, 4, 200, 30,
+                                       1.0, 10.0, 
+                                       "" ),
           mEnableCenterCameraBox( 561, 52, 4 ),
           mEnableNudeBox( -335, 148, 4 ),
           mUISizeSlider( mainFont, -335, 148, 4, 200, 30,
@@ -253,6 +261,8 @@ SettingsPage::SettingsPage()
     mEnableNudeBox.addActionListener( this );
     addComponent( &mEnableCenterCameraBox );
     mEnableCenterCameraBox.addActionListener( this );
+    addComponent( &mFOVSlider );
+    mFOVSlider.addActionListener( this );
     addComponent( &mEnableFOVBox );
     mEnableFOVBox.addActionListener( this );
     
@@ -322,6 +332,7 @@ SettingsPage::SettingsPage()
     mBackButton.setCursorTip( "GO BACK" );
     
     mEnableFOVBox.setCursorTip( "ENABLE ZOOM-IN AND ZOOM-OUT WITH MOUSE WHEEL SCROLLING" );
+    mFOVSlider.setCursorTip( "FIXED LEVEL OF ZOOM" );
     mEnableCenterCameraBox.setCursorTip( "ALWAYS CENTER THE CAMERA VIEW ON YOUR CHARACTER" );
     mEnableNudeBox.setCursorTip( "ENABLE NUDITY" );
     
@@ -647,8 +658,17 @@ void SettingsPage::actionPerformed( GUIComponent *inTarget ) {
         }
     else if( inTarget == &mEnableFOVBox ) {
         int newSetting = mEnableFOVBox.getToggled();
-        
         SettingsManager::setSetting( "fovEnabled", newSetting );
+        if( !newSetting ) {
+            mFOVSlider.setValue( gui_fov_scale_before_settings );
+            SettingsManager::setSetting( "fovFixedScale", gui_fov_scale_before_settings );
+            }
+        }
+    else if( inTarget == &mFOVSlider ) {
+        // change the value in increments of 0.25
+        float newSetting = round(mFOVSlider.getValue() * 4.0f) / 4.0f;
+        mFOVSlider.setValue( newSetting );
+        SettingsManager::setSetting( "fovFixedScale", newSetting );
         }
     else if( inTarget == &mEnableKActionsBox ) {
         int newSetting = mEnableKActionsBox.getToggled();
@@ -1107,13 +1127,22 @@ void SettingsPage::draw( doublePair inViewCenter,
             }
         }
     
+    if( mFOVSlider.isVisible() ) {
+        doublePair pos = mFOVSlider.getPosition();
+        
+        pos.x -= 60;
+        pos.y = mFOVSlider.getPosition().y;
+        pos.y -= 2;
+
+        drawTextWithShadow( "FIXED ZOOM LEVEL", pos, alignRight );
+        }
     if( mEnableFOVBox.isVisible() ) {
         doublePair pos = mEnableFOVBox.getPosition();
-        
+
         pos.x -= 30;
         pos.y -= 2;
 
-        drawTextWithShadow( "ENABLE ZOOM", pos, alignRight );
+        drawTextWithShadow( "WHEEL ZOOM", pos, alignRight );
         }
     
     if( mEnableKActionsBox.isVisible() ) {
@@ -1284,6 +1313,21 @@ void SettingsPage::draw( doublePair inViewCenter,
 
         drawTextWithShadow("ALWAYS SHOW NAMES", pos, alignRight);
         }
+    
+    // There is the Fixed Zoom Level label text to the right of this checkbox
+    // Redraw this to get the cursorTip drawn on top
+    if( mEnableFOVBox.isVisible() ) mEnableFOVBox.base_draw( lastScreenViewCenter, viewWidth );
+
+    // Redraw the lefe pane buttons to get the cursorTip drawn on top
+    mBackButton.base_draw( lastScreenViewCenter, viewWidth );
+    mAdvancedButton.base_draw( lastScreenViewCenter, viewWidth );
+    #ifdef USE_DISCORD
+    mDiscordButton.base_draw( lastScreenViewCenter, viewWidth );
+    #endif // USE_DISCORD
+    mSoundButton.base_draw( lastScreenViewCenter, viewWidth );
+    mScreenButton.base_draw( lastScreenViewCenter, viewWidth );
+    mControlButton.base_draw( lastScreenViewCenter, viewWidth );
+    mGameplayButton.base_draw( lastScreenViewCenter, viewWidth );
     }
 
 
@@ -1354,6 +1398,14 @@ void SettingsPage::makeActive( char inFresh ) {
         mMusicStartTime = 0;
 
         mUISizeSlider.setValue( 1 / gui_fov_target_scale_hud );
+        
+        mFOVSlider.setHighValue( fovMax );
+        if ( SettingsManager::getIntSetting( "fovEnabled", 0 ) ) {
+            mFOVSlider.setValue( gui_fov_scale_before_settings );
+            }
+        else {
+            mFOVSlider.setValue( SettingsManager::getFloatSetting( "fovFixedScale", 1.0f ) );
+            }
 
         mEnableAlwaysShowPlayerLabelsBox.setToggled( alwaysShowPlayerLabelEnabled );
         
@@ -1399,6 +1451,7 @@ void SettingsPage::updatePage() {
     double lineSpacing = 52;
     
     mEnableFOVBox.setPosition( 0, lineSpacing * 4 );
+    mFOVSlider.setPosition( 308, lineSpacing * 4 );
     mEnableCenterCameraBox.setPosition( 0, lineSpacing * 3 );
     mEnableNudeBox.setPosition( 0, lineSpacing * 2 );
     mUISizeSlider.setPosition( 28, lineSpacing * 1 );
@@ -1452,6 +1505,7 @@ void SettingsPage::updatePage() {
     mEnableAlwaysShowPlayerLabelsBox.setPosition(0, lineSpacing * -5);
     
     mEnableFOVBox.setVisible( mPage == 0 );
+    mFOVSlider.setVisible( mPage == 0 && !mEnableFOVBox.getToggled() );
     mEnableCenterCameraBox.setVisible( mPage == 0 );
     mEnableNudeBox.setVisible( mPage == 0 );
     mUISizeSlider.setVisible( mPage == 0 );

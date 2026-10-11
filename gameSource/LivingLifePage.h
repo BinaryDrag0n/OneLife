@@ -11,6 +11,7 @@
 
 #include "minorGems/game/game.h"
 
+#include "OneLife/server/HashTable.h"
 
 #include "transitionBank.h"
 
@@ -467,6 +468,7 @@ class LivingLifePage : public GamePage, public ActionListener {
         LivingLifePage();
         ~LivingLifePage();
         
+        void clearRememberedMap();
         void clearMap();
         
         // enabled tutorail next time a connection loads
@@ -500,6 +502,12 @@ class LivingLifePage : public GamePage, public ActionListener {
         virtual void specialKeyDown( int inKeyCode );
         
         virtual void keyUp( unsigned char inASCII );
+        virtual void specialKeyUp( int inKeyCode );
+
+        virtual void keybindKeyDown( int inKey );
+        virtual void keybindKeyUp( int inKey );
+
+        void addDebugMessage( char *message );
 
         void vogMove( int x, int y );
 
@@ -539,17 +547,19 @@ class LivingLifePage : public GamePage, public ActionListener {
             
 
         void setNextActionMessage( const char* str, int x, int y );
+        bool nextActionIs(const char *);
+        void onDropSent();
+        void onHoldingChange(int previous, int current);
         int getObjId( int mapX, int mapY );
         bool objIdReverseAction( int objId );
         void pickUpBabyInRange();
         void pickUpBaby( int x, int y );
         void useBackpack( bool replace = false );
-        void usePocket( int clothingID, bool replace = false );
+        void usePocket( int clothingID, bool replace = false, bool remove = false );
         void useOnSelf();
         void takeOffClothing();
         void takeOffBackpack();
         void setOurSendPosXY(int &x, int &y);
-        bool isCharKey(unsigned char c, unsigned char key);
         void drawTileVanillaHighlight( int x, int y, FloatColor floatColor, bool flashing = false, bool border = true );
         void drawTileVanillaRainbowHighlight( int x, int y );
 
@@ -567,6 +577,7 @@ class LivingLifePage : public GamePage, public ActionListener {
         void clickMove( float x, float y );
         void moveToAndClickTile(int tileX, int tileY, bool alpha);
         void checkIfMoveClickIsDone();
+        char handleMoveAction( const char *inActionName, bool *outKeyDown, char inAlpha, char inBeta, int inX, int inY );
 
         void movementStep();
         bool findNextMove(int &x, int &y, int dir);
@@ -642,7 +653,8 @@ class LivingLifePage : public GamePage, public ActionListener {
         
     protected:
         
-        int *mMapBiomes;
+        SimpleVector<doublePair> mRememberedChunkCoordinates;
+        HashTable<int*> mMapBiomesRemembered;
         int *mMapFloors;
 
         char *mMapCellDrawnFlags;
@@ -699,8 +711,8 @@ class LivingLifePage : public GamePage, public ActionListener {
         int mMapOffsetY;
         protected: // minitech
 
-        char mEKeyEnabled;
-        char mEKeyDown;
+        char mModClickEnabled;
+        char mModClickKeyDown;
         
 
         SpriteHandle mGuiPanelSprite;
@@ -1119,11 +1131,13 @@ class LivingLifePage : public GamePage, public ActionListener {
         
 
         char mUsingSteam;
-        char mZKeyDown;
-        
-        char mXKeyDown;
-        
-        char mGraveKeyDown;
+        char mHintBackKeyDown;
+
+        char mXrayKeyDown;
+
+        char mHideHudKeyDown;
+
+        char mJustOpenedSayField;
 
         
         //FOV
@@ -1161,7 +1175,7 @@ class LivingLifePage : public GamePage, public ActionListener {
         // true if tile index is covered by a floor tile that doesn't
         // have a +noCover tag
         char isCoveredByFloor( int inTileIndex );
-
+        int* findChunkByCoords( int absoluteChunkX, int absoluteChunkY );
 
         void drawHomeSlip( doublePair inSlipPos, int inIndex = 0 );
         

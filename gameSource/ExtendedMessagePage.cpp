@@ -86,3 +86,11 @@ void ExtendedMessagePage::draw( doublePair inViewCenter,
     
     }
 
+
+
+void ExtendedMessagePage::keyDown( unsigned char inASCII ) {
+    if( inASCII == 10 || inASCII == 13 ) {
+        // enter key
+        setSignal( "done" );
+        }
+    }

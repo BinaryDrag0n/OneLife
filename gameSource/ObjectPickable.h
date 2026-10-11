@@ -86,8 +86,8 @@ class ObjectPickable : public Pickable {
             
             doublePair c = getObjectCenterOffset( r );
             // take off contained offset, since it doesn't apply here
-            c.x -= r->containOffsetX;
-            c.y -= r->containOffsetY;
+            c.x -= r->containOffset.x;
+            c.y -= r->containOffset.y;
 
             inPos = sub( inPos, mult( c, zoom ) );
 

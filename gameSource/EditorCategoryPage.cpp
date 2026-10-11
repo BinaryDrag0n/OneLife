@@ -50,10 +50,11 @@ char parentUnpickable( int inID ) {
     int num = getNumCategoriesForObject( inID );
     
     for( int i=0; i<num; i++ ) {
-        if( ! 
-            getCategory( getCategoryForObject( inID, i ) )->isProbabilitySet ) {
+        if( !getCategory( getCategoryForObject( inID, i ) )->isProbabilitySet &&
+            !getCategory( getCategoryForObject( inID, i ) )->isContainabilitySet
+        ) {
             
-            // already a child of a non-prob-set category, can't be a parent
+            // already a child of a non-prob-set non-cont-set category, can't be a parent
             return true;
             }
         }
@@ -81,7 +82,8 @@ EditorCategoryPage::EditorCategoryPage()
           mTransEditorButton( mainFont, 0, 260, "Transitions" ),
           mIsPatternCheckbox( 220, 0, 2 ),
           mIsProbSetCheckbox( 220, -20, 2 ),
-          mMakeUniformButton( smallFont, 220, -80, "Make Uniform" ) {
+          mIsContSetCheckbox( 220, -40, 2 ),
+          mMakeUniformButton( smallFont, 220, -100, "Make Uniform" ) {
     
     mObjectChildPicker.addFilter( &childUnpickable );
     mObjectParentPicker.addFilter( &parentUnpickable );
@@ -92,6 +94,7 @@ EditorCategoryPage::EditorCategoryPage()
     addComponent( &mTransEditorButton );
     addComponent( &mIsPatternCheckbox );
     addComponent( &mIsProbSetCheckbox );
+    addComponent( &mIsContSetCheckbox );
     addComponent( &mMakeUniformButton );
     
 
@@ -102,11 +105,13 @@ EditorCategoryPage::EditorCategoryPage()
     
     mIsPatternCheckbox.addActionListener( this );
     mIsProbSetCheckbox.addActionListener( this );
+    mIsContSetCheckbox.addActionListener( this );
     
     mMakeUniformButton.addActionListener( this );
 
     mIsPatternCheckbox.setVisible( false );
     mIsProbSetCheckbox.setVisible( false );
+    mIsContSetCheckbox.setVisible( false );
     
     mMakeUniformButton.setVisible( false );
 
@@ -212,6 +217,7 @@ void EditorCategoryPage::actionPerformed( GUIComponent *inTarget ) {
             }
         if( set ) {
             mIsProbSetCheckbox.setToggled( false );
+            mIsContSetCheckbox.setToggled( false );
             mMakeUniformButton.setVisible( false );
             }
         }
@@ -223,8 +229,21 @@ void EditorCategoryPage::actionPerformed( GUIComponent *inTarget ) {
             }
         if( set ) {
             mIsPatternCheckbox.setToggled( false );
+            mIsContSetCheckbox.setToggled( false );
             }
         mMakeUniformButton.setVisible( set && mCurrentCategory != -1);
+        }
+    else if( inTarget == &mIsContSetCheckbox ) {
+        char set = mIsContSetCheckbox.getToggled();
+        
+        if( mCurrentCategory != -1 ) {
+            setCategoryIsContainabilitySet( mCurrentCategory, set );
+            }
+        if( set ) {
+            mIsPatternCheckbox.setToggled( false );
+            mIsProbSetCheckbox.setToggled( false );
+            mMakeUniformButton.setVisible( false );
+            }
         }
     else if( inTarget == &mMakeUniformButton ) {
         if( mCurrentCategory != -1 ) {
@@ -237,6 +256,7 @@ void EditorCategoryPage::actionPerformed( GUIComponent *inTarget ) {
 
 static void drawObjectList( char inCategories,
                             char inPattern,
+                            char inContainabilitySet,
                             SimpleVector<int> *inList,
                             SimpleVector<float> *inWeights = NULL,
                             int inSelectionIndex = -1 ) {
@@ -333,7 +353,14 @@ static void drawObjectList( char inCategories,
         
         if( inWeights != NULL ) {
             float prob = inWeights->getElementDirect( i );
-            char *probString = autoSprintf( "%.3f", prob );
+            char *probString = NULL;
+
+            if( inContainabilitySet ) {
+                probString = autoSprintf( "%.0f", prob );
+                }
+            else {
+                probString = autoSprintf( "%.3f", prob );
+                }
             
             smallFont->drawString( probString, 
                                    weightTextPos, alignLeft );
@@ -436,7 +463,7 @@ void EditorCategoryPage::draw( doublePair inViewCenter,
             cats.push_back( getCategoryForObject( mCurrentObject, i ) );
             }
     
-        drawObjectList( true, false, &cats, NULL, mSelectionIndex );
+        drawObjectList( true, false, false, &cats, NULL, mSelectionIndex );
         }
     else if( mCurrentCategory != -1 ) {
         CategoryRecord *cat = getCategory( mCurrentCategory );
@@ -455,18 +482,30 @@ void EditorCategoryPage::draw( doublePair inViewCenter,
                 
                 if( mIsProbSetCheckbox.getToggled() ) {
                     pos = mIsProbSetCheckbox.getPosition();
-                    pos.y -= 20;
+                    pos.y -= 40;
                     smallFont->drawString( "0-9 = enter prob digits", pos,
+                                           alignCenter );
+                    }
+                }
+            if( mIsContSetCheckbox.isVisible() ) {
+                pos = mIsContSetCheckbox.getPosition();
+                pos.x -= 12;
+                smallFont->drawString( "Cont Set", pos, alignRight );
+                
+                if( mIsContSetCheckbox.getToggled() ) {
+                    pos = mIsContSetCheckbox.getPosition();
+                    pos.y -= 20;
+                    smallFont->drawString( "0/1 = containee/container", pos,
                                            alignCenter );
                     }
                 }
 
             SimpleVector<float> *w = NULL;
-            if( cat->isProbabilitySet ) {
+            if( cat->isProbabilitySet || cat->isContainabilitySet ) {
                 w = &( cat->objectWeights );
                 }
             
-            drawObjectList( false, cat->isPattern,
+            drawObjectList( false, cat->isPattern, cat->isContainabilitySet,
                             &( cat->objectIDSet ), w, mSelectionIndex );
             }
         else {
@@ -475,6 +514,9 @@ void EditorCategoryPage::draw( doublePair inViewCenter,
 
             mIsProbSetCheckbox.setToggled( false );
             mIsProbSetCheckbox.setVisible( false );
+
+            mIsContSetCheckbox.setToggled( false );
+            mIsContSetCheckbox.setVisible( false );
             }
         }
     
@@ -502,6 +544,9 @@ void EditorCategoryPage::updateCheckbox() {
                 mIsProbSetCheckbox.setVisible( true );
                 mIsProbSetCheckbox.setToggled( cat->isProbabilitySet );
                 mMakeUniformButton.setVisible( cat->isProbabilitySet );
+
+                mIsContSetCheckbox.setVisible( true );
+                mIsContSetCheckbox.setToggled( cat->isContainabilitySet );
                 vis = true;
                 }
             else {
@@ -520,6 +565,8 @@ void EditorCategoryPage::updateCheckbox() {
         mIsProbSetCheckbox.setVisible( false );
         mIsProbSetCheckbox.setToggled( false );
         mMakeUniformButton.setVisible( false );
+        mIsContSetCheckbox.setVisible( false );
+        mIsContSetCheckbox.setToggled( false );
         }
     }
 
@@ -674,6 +721,23 @@ void EditorCategoryPage::keyDown( unsigned char inASCII ) {
             sscanf( oldString, "%f", &newWeight );
             
             delete [] oldString;
+
+            setMemberWeight( mCurrentCategory, 
+                             r->objectIDSet.getElementDirect( mSelectionIndex ),
+                             newWeight );
+            }
+        }
+
+    if( inASCII >= '0' && inASCII <= '1' && mCurrentCategory != -1 ) {
+        CategoryRecord *r = getCategory( mCurrentCategory );
+        
+        if( r->isContainabilitySet ) {
+            
+            float newWeight = 0.0f;
+            
+            if( inASCII == '1' ) {
+                newWeight = 1.0f;
+                }
 
             setMemberWeight( mCurrentCategory, 
                              r->objectIDSet.getElementDirect( mSelectionIndex ),

@@ -599,8 +599,8 @@ EditorObjectPage::EditorObjectPage()
     
     mCurrentObject.spriteSkipDrawing = NULL;
     
-    mCurrentObject.containOffsetX = 0;
-    mCurrentObject.containOffsetY = 0;
+    mCurrentObject.containOffset.x = 0;
+    mCurrentObject.containOffset.y = 0;
 
     mPickedObjectLayer = -1;
     mPickedSlot = -1;
@@ -1621,8 +1621,7 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
                    foodValue,
                    bonusValue,
                    mSpeedMultField.getFloat(),
-                   mCurrentObject.containOffsetX,
-                   mCurrentObject.containOffsetY,
+                   mCurrentObject.containOffset,
                    mCurrentObject.heldOffset,
                    mCurrentObject.clothing,
                    mCurrentObject.clothingOffset,
@@ -1803,8 +1802,7 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
                    foodValue,
                    bonusValue,
                    mSpeedMultField.getFloat(),
-                   mCurrentObject.containOffsetX,
-                   mCurrentObject.containOffsetY,
+                   mCurrentObject.containOffset,
                    mCurrentObject.heldOffset,
                    mCurrentObject.clothing,
                    mCurrentObject.clothingOffset,
@@ -2436,7 +2434,7 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
             mClothingOffsetClipboard = mCurrentObject.clothingOffset;
             }
         else if( mSetContainOffset ) {
-            mContainOffsetClipboard = {(double)mCurrentObject.containOffsetX, (double)mCurrentObject.containOffsetY};
+            mContainOffsetClipboard = mCurrentObject.containOffset;
             }
         }
     else if( inTarget == &mPasteHeldPosButton ) {
@@ -2447,8 +2445,7 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
             mCurrentObject.clothingOffset = mClothingOffsetClipboard;
             }
         else if( mSetContainOffset ) {
-            mCurrentObject.containOffsetX = (int)mContainOffsetClipboard.x;
-            mCurrentObject.containOffsetY = (int)mContainOffsetClipboard.y;
+            mCurrentObject.containOffset = mContainOffsetClipboard;
             }
         }
     else if( inTarget == &mDemoClothesButton ) {
@@ -3107,8 +3104,7 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
                         pickedRecord->spriteUseAppear[i];
                     }
                     
-                mCurrentObject.containOffsetX = pickedRecord->containOffsetX;
-                mCurrentObject.containOffsetY = pickedRecord->containOffsetY;
+                mCurrentObject.containOffset = pickedRecord->containOffset;
                 }
             if( jumpPerSprite > 0 ) {
                 for( int i=0; i<pickedRecord->numSprites; i++ ) {
@@ -3225,8 +3221,7 @@ void EditorObjectPage::actionPerformed( GUIComponent *inTarget ) {
             endVertRotDemo();
             mRotAdjustMode = false;
 
-            mCurrentObject.containOffsetX = pickedRecord->containOffsetX;
-            mCurrentObject.containOffsetY = pickedRecord->containOffsetY;
+            mCurrentObject.containOffset = pickedRecord->containOffset;
             
             mCurrentObject.heldOffset = pickedRecord->heldOffset;
 
@@ -4371,8 +4366,8 @@ void EditorObjectPage::draw( doublePair inViewCenter,
             // needs to be taken into account here
             ObjectRecord *containedObject = getObject( mCurrentObject.id );
             doublePair offset = getObjectWidestSpriteCenterOffset( containedObject );
-            offset.x += mCurrentObject.containOffsetX;
-            offset.y += mCurrentObject.containOffsetY;
+            offset.x += mCurrentObject.containOffset.x;
+            offset.y += mCurrentObject.containOffset.y;
             
             // temporarily tweaking the drawOffset, will restore it later
             drawOffset = sub( drawOffset, offset );
@@ -4464,8 +4459,8 @@ void EditorObjectPage::draw( doublePair inViewCenter,
                     }
 
 
-                centerOffset.x += demoObject->containOffsetX;
-                centerOffset.y += demoObject->containOffsetY;
+                centerOffset.x += demoObject->containOffset.x;
+                centerOffset.y += demoObject->containOffset.y;
 
                 if( mCurrentObject.slotVert[i] ) {
                     rot = 0.25 + demoObject->vertContainRotationOffset;
@@ -4515,8 +4510,8 @@ void EditorObjectPage::draw( doublePair inViewCenter,
                 // in this case it is just {0, 0}
                 }
                 
-            centerOffset.x += mCurrentObject.containOffsetX;
-            centerOffset.y += mCurrentObject.containOffsetY;
+            centerOffset.x += mCurrentObject.containOffset.x;
+            centerOffset.y += mCurrentObject.containOffset.y;
             
             if( containerObject->slotVert[i] ) {
                 rot = 0.25 + mCurrentObject.vertContainRotationOffset;
@@ -4582,8 +4577,8 @@ void EditorObjectPage::draw( doublePair inViewCenter,
             // in this case it is just {0, 0}
             }
             
-        slotPos.x += mCurrentObject.containOffsetX;
-        slotPos.y += mCurrentObject.containOffsetY;
+        slotPos.x += mCurrentObject.containOffset.x;
+        slotPos.y += mCurrentObject.containOffset.y;
 
         setDrawColor( red, green, blue, alpha );
         drawSprite( mSlotPlaceholderSprite, 
@@ -4614,8 +4609,8 @@ void EditorObjectPage::draw( doublePair inViewCenter,
         // hence the main object needs to be offset
         ObjectRecord *containedObject = getObject( mCurrentObject.id );
         doublePair offset = getObjectWidestSpriteCenterOffset( containedObject );
-        offset.x += mCurrentObject.containOffsetX;
-        offset.y += mCurrentObject.containOffsetY;
+        offset.x += mCurrentObject.containOffset.x;
+        offset.y += mCurrentObject.containOffset.y;
         
         // we have tweaked drawOffset above, restoring it here
         drawOffset = add( drawOffset, offset );
@@ -5130,7 +5125,7 @@ void EditorObjectPage::draw( doublePair inViewCenter,
             }
         else if( mSetContainOffset ) {
             smallFont->drawString( "Cont", pos, alignRight );
-            offset = {(double)mCurrentObject.containOffsetX, (double)mCurrentObject.containOffsetY};
+            offset = mCurrentObject.containOffset;
             }
         
         pos.y -= 12;
@@ -5876,7 +5871,7 @@ void EditorObjectPage::pointerDown( float inX, float inY ) {
         }
     else if( mSetContainOffset ) {    
         mSetContainMouseStart = pos;
-        mSetContainOffsetStart = {(double)mCurrentObject.containOffsetX, (double)mCurrentObject.containOffsetY};
+        mSetContainOffsetStart = mCurrentObject.containOffset;
         return;
         }
     
@@ -5979,8 +5974,8 @@ void EditorObjectPage::pointerDrag( float inX, float inY ) {
         
         doublePair diff = sub( cur, mSetContainMouseStart );
         
-        mCurrentObject.containOffsetX = mSetContainOffsetStart.x - diff.x;
-        mCurrentObject.containOffsetY = mSetContainOffsetStart.y - diff.y;
+        mCurrentObject.containOffset.x = mSetContainOffsetStart.x - diff.x;
+        mCurrentObject.containOffset.y = mSetContainOffsetStart.y - diff.y;
         return;
         }
 
@@ -6973,16 +6968,16 @@ void EditorObjectPage::specialKeyDown( int inKeyCode ) {
         
         switch( inKeyCode ) {
             case MG_KEY_LEFT:
-                mCurrentObject.containOffsetX += offset;
+                mCurrentObject.containOffset.x += offset;
                 break;
             case MG_KEY_RIGHT:
-                mCurrentObject.containOffsetX -= offset;
+                mCurrentObject.containOffset.x -= offset;
                 break;
             case MG_KEY_DOWN:
-                mCurrentObject.containOffsetY += offset;
+                mCurrentObject.containOffset.y += offset;
                 break;
             case MG_KEY_UP:
-                mCurrentObject.containOffsetY -= offset;
+                mCurrentObject.containOffset.y -= offset;
                 break;
             }
         return;

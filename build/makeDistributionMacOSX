@@ -8,8 +8,8 @@
 #
 
 
-if [ $# -lt 3 ] ; then
-   echo "Usage: $0 release_name unix_platform_name path_to_SDL.framework"
+if [ $# -lt 2 ] ; then
+   echo "Usage: $0 release_name unix_platform_name"
    exit 1
 fi
 
@@ -49,8 +49,49 @@ cp ../gameSource/OneLife mac/2HOL_$1/2HOL_$1.app/Contents/MacOS
 rm -r mac/2HOL_$1/2HOL_$1.app/Contents/MacOS/empty.txt
 rm -r mac/2HOL_$1/2HOL_$1.app/Contents/Frameworks/empty.txt
 
-# install SDL framework
-cp -r $3 mac/2HOL_$1/2HOL_$1.app/Contents/Frameworks/
+BREW_PREFIX=`brew --prefix 2>/dev/null || echo /usr/local`
+
+APP_BUNDLE=mac/2HOL_$1/2HOL_$1.app
+GAME_BINARY=$APP_BUNDLE/Contents/MacOS/OneLife
+
+targets=$GAME_BINARY
+
+while [ -n "$targets" ] ; do
+
+    nextTargets=""
+
+    for target in $targets ; do
+
+        for lib in `otool -L $target | tail -n +2 | awk '{print $1}' | grep "^$BREW_PREFIX/"` ; do
+
+            libName=`basename $lib`
+            bundledLib=$APP_BUNDLE/Contents/Frameworks/$libName
+
+            if [ ! -f $bundledLib ] ; then
+                cp -f $lib $bundledLib
+
+                # brew installs these read-only
+                chmod u+w $bundledLib
+
+                install_name_tool -id @executable_path/../Frameworks/$libName \
+                    $bundledLib
+
+                nextTargets="$nextTargets $bundledLib"
+            fi
+
+            install_name_tool -change $lib \
+                @executable_path/../Frameworks/$libName $target
+        done
+    done
+
+    targets=$nextTargets
+done
+
+
+# install_name_tool invalidates the signature the linker applied, and an
+# arm64 binary will not run at all without a valid one, so re-sign ad-hoc.
+codesign --force --deep --sign - $APP_BUNDLE
+
 
 cd mac
 

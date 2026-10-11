@@ -369,7 +369,6 @@ static DB persistentMapDB;
 static char persistentMapDBOpen = false;
     
 extern void restorePasswordRecord( int x, int y, unsigned char* passwordChars );
-extern void temp_passwordRecordTransfer();
  
  
 static int randSeed = 124567;
@@ -1357,7 +1356,11 @@ static int getBaseMap( int inX, int inY, char *outGridPlacement = NULL ) {
    
         return edgeObjectID;
         }
-   
+    
+    if( numBiomes == 0 ) {
+        return 0;
+        }
+
     int cachedID = mapCacheLookup( inX, inY, outGridPlacement );
    
     if( cachedID != -1 ) {
@@ -3919,12 +3922,6 @@ char initMap() {
             blankRowCount++;
             }
         }
-        
-    if( true ) {
-        
-        temp_passwordRecordTransfer();
-        
-        }
     
     AppLog::infoF(
         "persistentMapDB:  Found %d records, %d blank, %d password-protected tiles, %d valid flight landing pos.",
@@ -5380,7 +5377,7 @@ int checkDecayObject( int inX, int inY, int inID ) {
                                         avoidFloor ) {
                                         int floorID = getMapFloor( testX, testY );
                                     
-                                        if( floorID > 0 ) {
+                                        if( floorID > 0 && strstr( getObject( floorID )->description, "groundLikeFloor" ) == NULL ) {
                                             blockedByFloor = true;
                                             }
                                         }
@@ -5539,7 +5536,7 @@ int checkDecayObject( int inX, int inY, int inID ) {
                             avoidFloor ) {
                             int floorID = getMapFloor( testX, testY );
                         
-                            if( floorID > 0 ) {
+                            if( floorID > 0 && strstr( getObject( floorID )->description, "groundLikeFloor" ) == NULL ) {
                                 blockedByFloor = true;
                                 }
                             }
@@ -5679,7 +5676,7 @@ int checkDecayObject( int inX, int inY, int inID ) {
                                         int floorID = 
                                             getMapFloor( testX, testY );
                         
-                                        if( floorID > 0 ) {
+                                        if( floorID > 0 && strstr( getObject( floorID )->description, "groundLikeFloor" ) == NULL ) {
                                             // blocked by floor
                                             continue;
                                             }
@@ -6111,25 +6108,52 @@ void checkDecayContained( int inX, int inY, int inSubCont ) {
    
     SimpleVector<int> newContained;
     SimpleVector<timeSec_t> newDecayEta;
-   
-    SimpleVector< SimpleVector<int> > newSubCont;
-    SimpleVector< SimpleVector<timeSec_t> > newSubContDecay;
-   
-       
+
+    // enough room in these for numContained, even though our count
+    // might shrink due to this decay
+    int *newSubContCount = new int[numContained];
+    int **newSubCont = new int*[numContained];
+    timeSec_t **newSubContDecay = new timeSec_t*[numContained];
+    
+    
+        
     char change = false;
  
     // track last ID we saw with no decay, so we don't have to keep
     // looking it up over and over.
     int lastIDWithNoDecay = 0;
-   
-   
+    
+    int nextFillI = 0;
+    
     for( int i=0; i<numContained; i++ ) {
+        // set them all to NULL to start, so we know which ones to destroy later
+        newSubContCount[i] = 0;
+        newSubCont[i] = NULL;
+        newSubContDecay[i] = NULL;
+        
+
         int oldID = contained[i];
        
         if( oldID == lastIDWithNoDecay ) {
             // same ID we've already seen before
             newContained.push_back( oldID );
             newDecayEta.push_back( 0 );
+
+            if( inSubCont == 0 &&
+                oldID < 0 ) {
+                // oldID is a sub-container in our main container
+                // preserve what it contains
+                newSubCont[nextFillI] =
+                    getContainedRaw( inX, inY, 
+                                     &( newSubContCount[nextFillI] ),
+                                     i + 1 );
+                newSubContDecay[nextFillI] = 
+                    getContainedEtaDecay( inX, inY, 
+                                          &( newSubContCount[nextFillI] ),
+                                          i + 1 );
+                }
+            
+            nextFillI++;
             continue;
             }
        
@@ -6148,11 +6172,27 @@ void checkDecayContained( int inX, int inY, int inSubCont ) {
             // no auto-decay for this object
             if( isSubCont ) {
                 oldID *= -1;
+                
+                if( inSubCont == 0 ) {    
+                    // oldID is a sub-container in our main container
+                    // preserve what it contains
+                    newSubCont[nextFillI] =
+                        getContainedRaw( inX, inY, 
+                                         &( newSubContCount[nextFillI] ),
+                                         i + 1 );
+                    newSubContDecay[nextFillI] = 
+                        getContainedEtaDecay( inX, inY, 
+                                              &( newSubContCount[nextFillI] ),
+                                              i + 1 );
+                    }
+                
                 }
             lastIDWithNoDecay = oldID;
            
             newContained.push_back( oldID );
             newDecayEta.push_back( 0 );
+            
+            nextFillI++;
             continue;
             }
    
@@ -6399,22 +6439,36 @@ void checkDecayContained( int inX, int inY, int inSubCont ) {
                     // negative IDs indicate sub-containment
                     newID *= -1;
                     }
+                
+                if( inSubCont == 0 ) {    
+                    // oldID is a sub-container in our main container
+                    // preserve what it contains
+                    newSubCont[nextFillI] =
+                        getContainedRaw( inX, inY, 
+                                         &( newSubContCount[nextFillI] ),
+                                         i + 1 );
+                    newSubContDecay[nextFillI] = 
+                        getContainedEtaDecay( inX, inY, 
+                                              &( newSubContCount[nextFillI] ),
+                                              i + 1 );
+                    }
                 }
             newContained.push_back( newID );
             newDecayEta.push_back( mapETA );
+            nextFillI++;
             }
         }
    
    
     if( change ) {
         int *containedArray = newContained.getElementArray();
-        int numContained = newContained.size();
- 
-        setContained( inX, inY, newContained.size(), containedArray,
+        int numNewContained = newContained.size();
+
+        setContained( inX, inY, numNewContained, containedArray, 
                       inSubCont );
         delete [] containedArray;
-       
-        for( int i=0; i<numContained; i++ ) {
+        
+        for( int i=0; i<numNewContained; i++ ) {
             timeSec_t mapETA = newDecayEta.getElementDirect( i );
            
             if( mapETA != 0 ) {
@@ -6423,11 +6477,40 @@ void checkDecayContained( int inX, int inY, int inSubCont ) {
            
             setSlotEtaDecay( inX, inY, i, mapETA, inSubCont );
             }
+        
+        // loop over all old slots to set/clear sub-contained items
+        // we don't want any sub-contained things to linger in slots that
+        // are now empty (when numNewContained < numContained )
+        for( int i=0; i<numContained; i++ ) {
+            if( newSubCont[i] != NULL ) {
+                setContained( inX, inY, newSubContCount[i], 
+                              newSubCont[i],
+                              i + 1 );
+                setContainedEtaDecay( inX, inY, newSubContCount[i], 
+                                      newSubContDecay[i],
+                                      i + 1 );
+                }
+            else {
+                clearAllContained( inX, inY, i + 1 );
+                }
+            }
         }
  
     if( contained != NULL ) {
         delete [] contained;
         }
+
+    for( int i=0; i<numContained; i++ ) {
+        if( newSubCont[i] != NULL ) {
+            delete [] newSubCont[i];
+            }
+        if( newSubContDecay[i] != NULL ) {
+            delete [] newSubContDecay[i];
+            }
+        }
+    delete [] newSubContCount;
+    delete [] newSubCont;
+    delete [] newSubContDecay;
     }
  
  

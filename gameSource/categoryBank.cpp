@@ -109,6 +109,7 @@ float initCategoryBankStep() {
                 
                 r->isPattern = false;
                 r->isProbabilitySet = false;
+                r->isContainabilitySet = false;
                 
                 if( strstr( lines[next], "pattern" ) != NULL ) {
                     r->isPattern = true;
@@ -116,6 +117,10 @@ float initCategoryBankStep() {
                     }
                 else if( strstr( lines[next], "probSet" ) != NULL ) {
                     r->isProbabilitySet = true;
+                    next++;
+                    }
+                else if( strstr( lines[next], "contSet" ) != NULL ) {
+                    r->isContainabilitySet = true;
                     next++;
                     }
                 
@@ -130,7 +135,7 @@ float initCategoryBankStep() {
                     int objID = 0;
                     float prob = 0.0f;
                     
-                    if( r->isProbabilitySet ) {
+                    if( r->isProbabilitySet || r->isContainabilitySet ) {
                         sscanf( lines[next], "%d %f", &objID, &prob );
                         }
                     else {
@@ -341,13 +346,16 @@ void saveCategoryToDisk( int inParentID ) {
         else if( r->isProbabilitySet ) {
             lines.push_back( stringDuplicate( "probSet" ) );
             }
+        else if( r->isContainabilitySet ) {
+            lines.push_back( stringDuplicate( "contSet" ) );
+            }
         
         // start with 0 objects in a new category
         lines.push_back( autoSprintf( "numObjects=%d", 
                                       r->objectIDSet.size() ) );
         
         for( int i=0; i<r->objectIDSet.size(); i++ ) {
-            if( r->isProbabilitySet ) {
+            if( r->isProbabilitySet || r->isContainabilitySet ) {
                 lines.push_back( 
                     autoSprintf( "%d %f", 
                                  r->objectIDSet.getElementDirect(i),
@@ -507,6 +515,7 @@ static void addCategory( int inParentID ) {
     r->parentID = inParentID;
     r->isPattern = false;
     r->isProbabilitySet = false;
+    r->isContainabilitySet = false;
     
     idMap[ inParentID ] = r;
     
@@ -622,6 +631,7 @@ void setCategoryIsPattern( int inParentID, char inIsPattern ) {
         r->isPattern = inIsPattern;
         if( r->isPattern ) {
             r->isProbabilitySet = false;
+            r->isContainabilitySet = false;
             // zero all weights
             for( int i=0; i< r->objectWeights.size(); i++ ) {
                 *( r->objectWeights.getElement( i ) ) = 0;
@@ -641,6 +651,7 @@ void setCategoryIsProbabilitySet( int inParentID, char inIsProbabilitySet ) {
         r->isProbabilitySet = inIsProbabilitySet;
         if( r->isProbabilitySet ) {
             r->isPattern = false;
+            r->isContainabilitySet = false;
             if( !oldVal ) {
                 // all zero weights, fix it
                 if( r->objectWeights.size() > 0 ) {
@@ -658,6 +669,23 @@ void setCategoryIsProbabilitySet( int inParentID, char inIsProbabilitySet ) {
         }
     }
 
+
+void setCategoryIsContainabilitySet( int inParentID, char inIsContainabilitySet ) {
+    CategoryRecord *r = getCategory( inParentID );
+    
+    if( r != NULL ) {
+        r->isContainabilitySet = inIsContainabilitySet;
+        if( r->isContainabilitySet ) {
+            r->isPattern = false;
+            r->isProbabilitySet = false;
+            // zero all weights
+            for( int i=0; i< r->objectWeights.size(); i++ ) {
+                *( r->objectWeights.getElement( i ) ) = 0;
+                }
+            }
+        saveCategoryToDisk( inParentID );
+        }
+    }
 
 
 
@@ -898,7 +926,7 @@ void moveCategoryMemberDown( int inParentID, int inObjectID, int inListIndex ) {
 void setMemberWeight( int inParentID, int inObjectID, float inWeight ) {
 
     CategoryRecord *r = getCategory( inParentID );
-    if( r != NULL && r->isProbabilitySet ) {        
+    if( r != NULL && (r->isProbabilitySet || r->isContainabilitySet) ) {        
         int index = r->objectIDSet.getElementIndex( inObjectID );
         
         if( index != -1 ) {
@@ -1003,3 +1031,11 @@ char isProbabilitySet( int inParentID ) {
     return false;
     }
 
+
+char isContainabilitySet( int inParentID ) {
+    CategoryRecord *r = getCategory( inParentID );
+    if( r != NULL && r->isContainabilitySet ) { 
+        return true;
+        }
+    return false;
+    }

@@ -29,6 +29,8 @@ class ExtendedMessagePage : public GamePage, public ActionListener {
         virtual void draw( doublePair inViewCenter, 
                            double inViewSize );
         
+        virtual void keyDown( unsigned char inASCII );
+        
     protected:
         
         TextButton mOKButton;

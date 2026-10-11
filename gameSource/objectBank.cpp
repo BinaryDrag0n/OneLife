@@ -1284,13 +1284,13 @@ float initObjectBankStep() {
 
 
 
-                r->containOffsetX = 0;
-                r->containOffsetY = 0;
+                r->containOffset.x = 0;
+                r->containOffset.y = 0;
                             
                 if( strstr( lines[next], "containOffset=" ) != NULL ) {
-                    sscanf( lines[next], "containOffset=%d,%d", 
-                            &( r->containOffsetX ),
-                            &( r->containOffsetY ) );
+                    sscanf( lines[next], "containOffset=%lf,%lf", 
+                            &( r->containOffset.x ),
+                            &( r->containOffset.y ) );
                                 
                     next++;
                     }
@@ -2830,8 +2830,7 @@ int reAddObject( ObjectRecord *inObject,
                         inObject->foodValue,
                         inObject->bonusValue,
                         inObject->speedMult,
-                        inObject->containOffsetX,
-                        inObject->containOffsetY,
+                        inObject->containOffset,
                         inObject->heldOffset,
                         inObject->clothing,
                         inObject->clothingOffset,
@@ -2922,6 +2921,10 @@ void resaveAll() {
 
 
 ObjectRecord *getObject( int inID, char inNoDefault ) {
+    if( inID == -1 ) {
+        return NULL;
+        }
+    
     inID = extractObjectID( inID );
     
     if( inID < mapSize ) {
@@ -3179,8 +3182,7 @@ int addObject( const char *inDescription,
                int inFoodValue,
                int inBonusValue,
                float inSpeedMult,
-               int inContainOffsetX,
-               int inContainOffsetY,
+               doublePair inContainOffset,
                doublePair inHeldOffset,
                char inClothing,
                doublePair inClothingOffset,
@@ -3427,9 +3429,9 @@ int addObject( const char *inDescription,
         
         lines.push_back( autoSprintf( "speedMult=%f", inSpeedMult ) );
 
-        if( inContainOffsetX != 0 || inContainOffsetY != 0 )
-        lines.push_back( autoSprintf( "containOffset=%d,%d",
-                                      inContainOffsetX, inContainOffsetY ) );
+        if( inContainOffset.x != 0 || inContainOffset.y != 0 )
+        lines.push_back( autoSprintf( "containOffset=%f,%f",
+                                      inContainOffset.x, inContainOffset.y ) );
 
         lines.push_back( autoSprintf( "heldOffset=%f,%f",
                                       inHeldOffset.x, inHeldOffset.y ) );
@@ -3859,8 +3861,7 @@ int addObject( const char *inDescription,
 
     
     r->speedMult = inSpeedMult;
-    r->containOffsetX = inContainOffsetX;
-    r->containOffsetY = inContainOffsetY;
+    r->containOffset = inContainOffset;
     r->heldOffset = inHeldOffset;
     r->clothing = inClothing;
     r->clothingOffset = inClothingOffset;
@@ -4172,6 +4173,12 @@ HoldingPos drawObject( ObjectRecord *inObject, int inDrawBehindSlots,
                        char inHideAllLimbs,
                        char inHeldNotInPlaceYet,
                        ClothingSet inClothing ) {
+
+    HoldingPos returnHoldingPos = { false, {0, 0}, 0 };
+    
+    if( inObject == NULL ) {
+        return returnHoldingPos;
+        }
     
     if( drawingContained ) { 
         inPos.y += getLivingLifeBouncingYOffset( inObject->id );
@@ -4180,8 +4187,6 @@ HoldingPos drawObject( ObjectRecord *inObject, int inDrawBehindSlots,
     if( inObject->noFlip ) {
         inFlipH = false;
         }
-
-    HoldingPos returnHoldingPos = { false, {0, 0}, 0 };
     
     SimpleVector <int> frontArmIndices;
     getFrontArmIndices( inObject, inAge, &frontArmIndices );
@@ -4584,6 +4589,15 @@ HoldingPos drawObject( ObjectRecord *inObject, doublePair inPos, double inRot,
                 inHideAllLimbs,
                 inHeldNotInPlaceYet,
                 inClothing );
+    
+    if( inObject == NULL ) {
+        return drawObject( inObject, 1, inPos, inRot, inWorn, inFlipH, inAge, 
+                           inHideClosestArm,
+                           inHideAllLimbs,
+                           inHeldNotInPlaceYet,
+                           inClothing );
+        }
+    
 
     // char allBehind = true;
     // for( int i=0; i< inObject->numSprites; i++ ) {
@@ -5310,6 +5324,13 @@ double getClosestObjectPart( ObjectRecord *inObject,
     *outClothing = -1;
     *outSlot = -1;
 
+    double smallestDist = 9999999;
+
+    if( inObject == NULL ) {
+        return smallestDist;
+        }
+    
+
     doublePair headPos = {0,0};
 
     int headIndex = getHeadIndex( inObject, inAge );
@@ -5628,7 +5649,6 @@ double getClosestObjectPart( ObjectRecord *inObject,
         }
     
     
-    double smallestDist = 9999999;
 
     char closestBehindSlots = false;
     
@@ -6573,8 +6593,8 @@ void getArmHoldingParameters( ObjectRecord *inHeldObject,
             *outHideClosestArm = 0;
 
             // show limbs when riding a bike or sitting
-            if( !inHeldObject->ridingAnimationIndex == biking &&
-                !inHeldObject->ridingAnimationIndex == sitting )
+            if( inHeldObject->ridingAnimationIndex != biking &&
+                inHeldObject->ridingAnimationIndex != sitting )
                 *outHideAllLimbs = true;
 
             }
@@ -6690,8 +6710,8 @@ doublePair computeContainedCenterOffset( ObjectRecord *inContainerObject,
     // instead of inside getObjectCenterOffset and getObjectBottomCenterOffset
     // so the offsets won't interfere with heldPos
     // (heldPos uses getObjectCenterOffset)
-    centerOffset.x += inContainedObject->containOffsetX;
-    centerOffset.y += inContainedObject->containOffsetY;
+    centerOffset.x += inContainedObject->containOffset.x;
+    centerOffset.y += inContainedObject->containOffset.y;
         
     return centerOffset;
         

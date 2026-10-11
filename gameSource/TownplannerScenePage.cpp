@@ -1828,6 +1828,74 @@ void EditorScenePage::drawUnderComponents( doublePair inViewCenter,
                             delete [] subContained;
                             }
                         }
+
+                    SceneCell *c = &( mCells[y][x] );
+
+                    if( c->oID > 0 ) {
+
+                        ObjectRecord *o = getObject( c->oID );
+
+                        // this is a flag that denotes the "Behind-player" sprites in this object
+                        // should be drawn in the same row as the object, instead of all the way in the
+                        // back on a separate layer
+                        char specialPartiallyBehindFlag = o->drawBehindPlayer && o->anySpritesBehindPlayer;
+
+                        if( b == 1 && specialPartiallyBehindFlag ) {
+
+                            doublePair cellPos = pos;
+                            
+                            cellPos.x += c->xOffset;
+                            cellPos.y += c->yOffset;
+
+                            cellPos = add( cellPos, c->moveOffset );
+
+                            
+                            double thisFrameTime = c->frozenAnimTime;
+                                
+                            if( thisFrameTime < 0 ) {
+                                thisFrameTime = frameTime + fabs( thisFrameTime );
+                                }
+
+                        
+                            char used;
+                            int *contained = c->contained.getElementArray();
+                            SimpleVector<int> *subContained = 
+                                c->subContained.getElementArray();
+
+
+                            ObjectRecord *cellO = getObject( c->oID );
+
+                            prepareToSkipSprites( cellO, false );
+
+                            drawObjectAnim( c->oID, c->anim, 
+                                    thisFrameTime, 
+                                    0,
+                                    c->anim,
+                                    thisFrameTime,
+                                    0,
+                                    &used,
+                                    ground,
+                                    ground,
+                                    cellPos,
+                                    0,
+                                    false,
+                                    c->flipH,
+                                    -1,
+                                    0,
+                                    false,
+                                    false,
+                                    c->clothing,
+                                    NULL,
+                                    c->contained.size(), contained,
+                                    subContained );
+                            delete [] contained;
+                            delete [] subContained;
+
+                            restoreSkipDrawing( cellO );
+
+                            }
+                        }
+
                     }
                 }
             

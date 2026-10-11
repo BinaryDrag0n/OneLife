@@ -193,3 +193,12 @@ void RebirthChoicePage::makeActive( char inFresh ) {
         mTutorialButton.setLabelText( translate( "tutorial" ) );
         }
     }
+
+
+
+void RebirthChoicePage::keyDown( unsigned char inASCII ) {
+    if( inASCII == 10 || inASCII == 13 ) {
+        // enter key
+        setSignal( "reborn" );
+        }
+    }

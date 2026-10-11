@@ -11,9 +11,15 @@ callgrind.out*
 leak.out*
 core*
 
+# macOS files
+*.dSYM/
+.DS_Store
+
 gameSource/OneLife
 gameSource/OneLife.exe
+gameSource/EditOneLife
 gameSource/EditOneLife.exe
+gameSource/TownPlanner
 gameSource/TownPlanner.exe
 gameSource/testUser/*
 gameSource/testUser2/*
@@ -22,7 +28,13 @@ gameSource/screenShots/*
 gameSource/icon.ico
 gameSource/icon.rc
 
+build/base/
+build/release/
+build/mac/
+build/windows/
+
 server/OneLifeServer
+server/OneLifeServer.exe
 server/log.txt
 server/recentPlacements.txt
 server/*.db

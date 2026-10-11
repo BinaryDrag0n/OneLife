@@ -106,6 +106,8 @@ CustomRandomSource randSource( 34957197 );
 
 #include "message.h"
 
+#include "KeybindManager.h"
+
 #ifdef USE_DISCORD
 #include "DiscordController.h"
 #endif // USE_DISCORD
@@ -201,6 +203,8 @@ int gui_fov_offset_y = (int)(((720 * gui_fov_target_scale_hud) - 720)/2);
 
 float gui_fov_scale_before_settings = 1.0f;
 
+float fovMax = 10.0f;
+
 
 double viewWidth = 1280;
 double viewHeight = 720;
@@ -237,7 +241,11 @@ void loadFovSettings() {
         SettingsManager::setSetting( "fovScaleHUD", gui_fov_target_scale_hud );
         }
 
+    // don't apply fovFixedScale here
+    // login page and loading page requires zoom = 1.0
     gui_fov_scale = 1.0f;
+
+    fovMax = SettingsManager::getFloatSetting( "fovMax", 10.0 );
 
     gui_fov_scale_hud = gui_fov_scale / gui_fov_target_scale_hud;
     gui_fov_offset_x = (int)(((1280 * gui_fov_target_scale_hud) - 1280)/2);
@@ -919,6 +927,43 @@ int currentHelpPage = 0;
 int totalNumOfHelpPages = 0;
 
 
+static void replaceKeybindNames( char *&outLine ) { // use format {k=<actionName>} to replace with the keybinds display string
+
+    if( strstr( outLine, "{k=" ) ) {
+        SimpleVector<char> out;
+        char *pos = outLine;
+
+        while( *pos != '\0' ) {
+            if( strncmp( pos, "{k=", 3 ) == 0 ) {
+                char *start = pos + 3;
+                char *end = strchr( start, '}' );
+
+                if( end == NULL ) {
+                    out.push_back( *pos );
+                    pos++;
+                    continue;
+                    }
+
+                *end = '\0';
+                char *keyString = KeybindManager::buildKeyString( start, true, true );
+
+                for( int i = 0; keyString[i] != '\0'; i++ ) {
+                    out.push_back( keyString[i] );
+                    }
+                delete [] keyString;
+
+                pos = end + 1;
+                continue;
+                }
+            out.push_back( *pos );
+            pos++;
+            }
+
+        delete [] outLine;
+        outLine = out.getElementString();
+        }
+    }
+
 static void drawPauseScreen() {
     
     if( isPaused() &&
@@ -1133,6 +1178,7 @@ static void drawPauseScreen() {
                         lines[i] = holder[1];
                         subString = holder[2];
                         isSub = true;
+                        replaceKeybindNames( lines[i] );
                         }
                     else if ( strstr( lines[i], "space$" ) != NULL ) {
                         float lineScale;
@@ -2852,7 +2898,8 @@ void pointerUp( float inX, float inY ) {
 
 
 void keyDown( unsigned char inASCII ) {
-    
+    char keybindChar = KeybindManager::charDown( inASCII );
+
     if( inASCII == 27 ) { // ESCAPE KEY
         TextField::unfocusAll();
         if ( currentGamePage == settingsPage ) {
@@ -2863,7 +2910,7 @@ void keyDown( unsigned char inASCII ) {
         }
 
     // taking screen shot is ALWAYS possible
-    if( inASCII == '=' ) {    
+    if( inASCII == '=' ) {
         saveScreenShot( "screen" );
         }
     /*
@@ -2928,6 +2975,7 @@ void keyDown( unsigned char inASCII ) {
 
     if( currentGamePage != NULL ) {
         currentGamePage->base_keyDown( inASCII );
+        if( keybindChar ) currentGamePage->base_keybindKeyDown( inASCII );
         }
 
 
@@ -2948,16 +2996,19 @@ void keyDown( unsigned char inASCII ) {
 
 
 void keyUp( unsigned char inASCII ) {
+    char keybindChar = KeybindManager::charUp( inASCII );
+
     if( inASCII == 127 || inASCII == 8 ) {
         // delete no longer held
         // even if pause screen no longer up, pay attention to this
         holdDeleteKeySteps = -1;
         }
-
+    
     if( isPaused() ) return;
 
     if( currentGamePage != NULL ) {
         currentGamePage->base_keyUp( inASCII );
+        if( keybindChar ) currentGamePage->base_keybindKeyUp( inASCII );
         }
 
     }
@@ -2969,28 +3020,56 @@ void keyUp( unsigned char inASCII ) {
 
 
 void specialKeyDown( int inKey ) {
+    KeybindManager::keyDown( inKey );
+
     if( isPaused() ) {
         return;
         }
-    
+
     if( currentGamePage != NULL ) {
         currentGamePage->base_specialKeyDown( inKey );
+        currentGamePage->base_keybindKeyDown( inKey );
         }
     }
 
 
 
 void specialKeyUp( int inKey ) {
+    KeybindManager::keyUp( inKey );
+
     if( isPaused() ) {
         return;
         }
 
     if( currentGamePage != NULL ) {
         currentGamePage->base_specialKeyUp( inKey );
+        currentGamePage->base_keybindKeyUp( inKey );
         }
-    } 
+    }
 
+void unmodifiedKeyDown( unsigned char inKey ) {
+    KeybindManager::keyDown( inKey );
 
+    if( isPaused() ) {
+        return;
+        }
+
+    if( currentGamePage != NULL ) {
+        currentGamePage->base_keybindKeyDown( inKey );
+        }
+    }
+
+void unmodifiedKeyUp( unsigned char inKey ) {
+    KeybindManager::keyUp( inKey );
+
+    if( isPaused() ) {
+        return;
+        }
+
+    if( currentGamePage != NULL ) {
+        currentGamePage->base_keybindKeyUp( inKey );
+        }
+    }
 
 
 char getUsesSound() {

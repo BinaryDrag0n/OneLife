@@ -1,0 +1,290 @@
+name: Build Release
+
+# Note: the following workflow is not representative of the current 2HOL build
+# process, where we rely on miniOneLifeCompile. It remains for forks that wish to make use of it.
+
+
+# Builds the client for Linux, Windows and macOS and attaches the zips to a
+# release.  Separate from release.yml, which only bumps dataVersionNumber and
+# pushes the tags -- this workflow reacts to the tag that one creates.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a GitHub release from this run (no tag push needed)'
+        type: boolean
+        default: false
+      tag:
+        description: 'Tag for the forced release.  Created at this commit if it does not exist.  Blank means 2HOL_v<data version>-build<run number>, published as a prerelease.'
+        type: string
+        default: ''
+  # push:
+  #   tags:
+  #     - '2HOL_v*'
+
+env:
+  # Resolves to this repo's owner, so the workflow can be tested in a fork
+  # (which needs the fork's minorGems) and works unchanged upstream.
+  MINORGEMS_REPO: ${{ github.repository_owner }}/minorGems
+  DATA_REPO: twohoursonelife/OneLifeData7
+
+jobs:
+
+  build-linux-windows:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout OneLife
+        uses: actions/checkout@v4
+        with:
+          path: OneLife
+
+      - name: Checkout OneLifeData7
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DATA_REPO }}
+          path: OneLifeData7
+
+      - name: Checkout minorGems
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MINORGEMS_REPO }}
+          path: minorGems
+
+      - name: Read data version
+        id: version
+        run: echo "version=$(cat OneLifeData7/dataVersionNumber.txt)" >> $GITHUB_OUTPUT
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            rsync wget unzip zip git \
+            imagemagick \
+            libglu1-mesa-dev libgl1-mesa-dev libsdl1.2-dev \
+            libpng-dev zlib1g-dev \
+            mingw-w64 build-essential
+
+      # Cross-compiled SDL, zlib and libpng for the Windows target.  Built from
+      # source into the MinGW prefix; no distro package provides these.
+      - name: Build MinGW cross libraries
+        run: |
+          set -e
+          mkdir -p dependencies
+          cd dependencies
+
+          wget https://www.libsdl.org/release/SDL-1.2.15.tar.gz -O- | tar xfz -
+          cd SDL-1.2.15
+          ./configure \
+            --bindir=/usr/i686-w64-mingw32/bin \
+            --libdir=/usr/i686-w64-mingw32/lib \
+            --includedir=/usr/i686-w64-mingw32/include \
+            --host=i686-w64-mingw32 \
+            --prefix=/usr/i686-w64-mingw32 \
+            CPPFLAGS="-I/usr/i686-w64-mingw32/include" \
+            LDFLAGS="-L/usr/i686-w64-mingw32/lib"
+          make
+          sudo make install
+          cd ..
+
+          wget http://zlib.net/fossils/zlib-1.2.12.tar.gz -O- | tar xfz -
+          cd zlib-1.2.12
+          sudo make -f win32/Makefile.gcc \
+            BINARY_PATH=/usr/i686-w64-mingw32/bin \
+            INCLUDE_PATH=/usr/i686-w64-mingw32/include \
+            LIBRARY_PATH=/usr/i686-w64-mingw32/lib \
+            SHARED_MODE=1 \
+            PREFIX=i686-w64-mingw32- \
+            install
+          cd ..
+
+          wget "https://sourceforge.net/projects/libpng/files/libpng16/older-releases/1.6.37/libpng-1.6.37.tar.gz/download" -O- | tar xfz -
+          cd libpng-1.6.37
+          ./configure \
+            --host=i686-w64-mingw32 \
+            --prefix=/usr/i686-w64-mingw32 \
+            CPPFLAGS="-I/usr/i686-w64-mingw32/include" \
+            LDFLAGS="-L/usr/i686-w64-mingw32/lib"
+          make
+          sudo make install
+
+      - name: Fetch Discord Game SDK
+        run: |
+          set -e
+          cd dependencies
+          wget https://dl-game-sdk.discordapp.net/3.2.1/discord_game_sdk.zip
+          unzip -q -d discord_game_sdk discord_game_sdk.zip
+          rm discord_game_sdk.zip
+          # The SDK header includes <Windows.h>; MinGW's header is lowercase
+          sed -i 's/<Windows.h>/<windows.h>/' discord_game_sdk/c/discord_game_sdk.h
+
+      - name: Build Windows client
+        run: |
+          set -e
+          export PATH="/usr/i686-w64-mingw32/bin:$PATH"
+          cd OneLife
+          ./configure 5 ../minorGems --discord_sdk_path "$GITHUB_WORKSPACE/dependencies/discord_game_sdk"
+          cd gameSource
+          make
+
+      - name: Package Windows
+        run: OneLife/build/makeReleaseFolder v${{ steps.version.outputs.version }} 5
+
+      # The Windows objects were built by the cross compiler and cannot be
+      # linked into a native binary, so wipe them before the Linux pass.
+      - name: Clean cross-compiled objects
+        run: find OneLife minorGems -type f \( -name '*.o' -o -name '*.dep' -o -name '*.dep2' \) -delete
+
+      - name: Build Linux client
+        run: |
+          set -e
+          cd OneLife
+          ./configure 1 ../minorGems --discord_sdk_path "$GITHUB_WORKSPACE/dependencies/discord_game_sdk"
+          cd gameSource
+          make
+
+      - name: Package Linux
+        run: OneLife/build/makeReleaseFolder v${{ steps.version.outputs.version }} 1
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-windows
+          path: OneLife/build/release/*.zip
+          if-no-files-found: error
+
+  build-mac:
+    # macos-latest runners are Apple Silicon, so this produces an arm64 build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout OneLife
+        uses: actions/checkout@v4
+        with:
+          path: OneLife
+
+      - name: Checkout OneLifeData7
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DATA_REPO }}
+          path: OneLifeData7
+
+      - name: Checkout minorGems
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MINORGEMS_REPO }}
+          path: minorGems
+
+      - name: Read data version
+        id: version
+        run: echo "version=$(cat OneLifeData7/dataVersionNumber.txt)" >> $GITHUB_OUTPUT
+
+      # gnu-sed because makeReleaseFolder needs GNU sed -i; sdl12-compat
+      # provides the SDL 1.2 API that minorGems is written against.
+      - name: Install packages
+        run: brew install rsync wget imagemagick gnu-sed libpng sdl12-compat
+
+      # No --discord_sdk_path: minorGems has no Discord implementation for
+      # mac, and Makefile.MacOSX errors out if the SDK path is set.
+      - name: Build macOS client
+        run: |
+          set -e
+          cd OneLife
+          ./configure 2
+          cd gameSource
+          make
+
+      - name: Package macOS
+        run: OneLife/build/makeReleaseFolder v${{ steps.version.outputs.version }} 2
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-mac
+          path: OneLife/build/release/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: [build-linux-windows, build-mac]
+    # Tag pushes publish automatically.  A workflow_dispatch run only produces
+    # downloadable artifacts unless it is dispatched with publish=true, which
+    # forces a release without waiting on release.yml to push a tag.
+    if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # A tag push names itself.  A forced run uses the tag typed at dispatch,
+      # or falls back to a per-run prerelease tag that cannot collide with a
+      # real release.
+      - name: Resolve tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          VERSION: ${{ needs.build-linux-windows.outputs.version }}
+        run: |
+          set -e
+          if [ "${{ github.ref_type }}" = tag ]; then
+            echo "name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "prerelease=" >> $GITHUB_OUTPUT
+          elif [ -n "$INPUT_TAG" ]; then
+            echo "name=$INPUT_TAG" >> $GITHUB_OUTPUT
+            echo "prerelease=" >> $GITHUB_OUTPUT
+          else
+            echo "name=2HOL_v${VERSION}-build${{ github.run_number }}" >> $GITHUB_OUTPUT
+            echo "prerelease=--prerelease" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job has no checkout, so gh needs to be told which repo it acts on
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.tag.outputs.name }}
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+        run: |
+          cat > notes.md <<'NOTES'
+          ## Downloads
+
+          - **Windows** — unzip and run `OneLife.exe`
+          - **Linux** — unzip and run `./OneLife`
+          - **macOS (Apple Silicon)** — unzip and open the `.app` inside the folder.
+            Keep the `.app` where it is: it reads the game data sitting next to it.
+
+          ### macOS first run
+
+          The app is ad-hoc signed rather than notarized, so macOS will refuse to
+          open it until you clear the quarantine flag:
+
+          ```
+          xattr -dr com.apple.quarantine 2HOL_*/2HOL_*.app
+          ```
+
+          Or right-click the app and choose Open, then confirm.
+
+          This build is Apple Silicon only, and Discord integration is not
+          included on macOS.
+          NOTES
+
+          # Re-running a forced build against an existing tag replaces its
+          # zips rather than failing on the already-published release.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" \
+              artifacts/release-linux-windows/*.zip \
+              artifacts/release-mac/*.zip \
+              --clobber
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes-file notes.md \
+              --target "$GITHUB_SHA" \
+              $PRERELEASE \
+              artifacts/release-linux-windows/*.zip \
+              artifacts/release-mac/*.zip
+          fi

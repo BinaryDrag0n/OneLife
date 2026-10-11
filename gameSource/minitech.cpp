@@ -8,6 +8,7 @@
 #include <regex> //to tokenize object names for whole word matching, and comment stripping
 
 #include "LivingLifePage.h"
+#include "KeybindManager.h"
 #include "groundSprites.h"
 #include "objectBank.h"
 #include "categoryBank.h"
@@ -45,7 +46,6 @@ SimpleVector<int> *minitech::mMapContainedStacks;
 SimpleVector<SimpleVector<int>> *minitech::mMapSubContainedStacks;
 
 bool minitech::minitechMinimized = true;
-unsigned char minitech::minimizeKey;
 int minitech::stepCount;
 int minitech::currentX;
 int minitech::currentY;
@@ -188,9 +188,6 @@ void minitech::setLivingLifePage(
     mMapSubContainedStacks = inmMapSubContainedStacks;
     
     minitechEnabled = SettingsManager::getIntSetting( "minitechEnabled", 1 );
-    char *minimizeKeyFromSetting = SettingsManager::getStringSetting("minitechMinimizeKey", "v");
-    minimizeKey = minimizeKeyFromSetting[0];
-    delete [] minimizeKeyFromSetting;
     
     showUncraftables = SettingsManager::getIntSetting( "minitechShowUncraftables", 0 );
     
@@ -322,7 +319,7 @@ bool minitech::isCategory(int objId) {
 
 minitech::mouseListener* minitech::getMouseListenerByArea( 
     vector<mouseListener*>* listeners, doublePair posTL, doublePair posBR ) {
-    for (int i=0; i<(int)listeners->size(); i++) {
+    for (size_t i=0; i<listeners->size(); i++) {
         if (
             posEqual( (*listeners)[i]->posTL, posTL) &&
             posEqual( (*listeners)[i]->posBR, posBR)
@@ -753,8 +750,8 @@ void minitech::drawStr(
     
     doublePair screenCenter = livingLifePage->minitechGetLastScreenViewCenter();
     
-    char sBuf[64];
-    sprintf( sBuf, "%s", str.c_str() );
+    char sBuf[96];
+    snprintf( sBuf, sizeof(sBuf), "%s", str.c_str() );
     float textWidth = 0;
     if (font == "handwritten") {
         textWidth = handwritingFont->measureString( sBuf );
@@ -870,45 +867,79 @@ void minitech::drawHintObjectTile() {
 vector<TransRecord*> minitech::getUsesTrans(int objId) {
     
     SimpleVector<TransRecord*> *usesTrans = getAllUses( objId );
-    vector<TransRecord*> results;
-    
-    int numTrans = 0;
-    if( usesTrans != NULL ) {
-        numTrans = usesTrans->size();
-    }
-    if( numTrans == 0 ) {
-        return results; 
-    }
+    vector<TransRecord*> temp;
+    if( usesTrans == NULL ) return temp;
 
-    for( int t=0; t<numTrans; t++ ) {
+    for( int t=0; t<usesTrans->size(); t++ ) {
         
         TransRecord *trans = usesTrans->getElementDirect( t );
         
-        int idA = trans->actor;
-        int idB = trans->target;
+        // int idA = trans->actor;
+        // int idB = trans->target;
         int idC = trans->newActor;
         int idD = trans->newTarget;
         
         //parse probabilitySet transitions (e.g. fishing)
-        int cOrD = -1;
-        if ( isProbabilitySet(idC) ) cOrD = 0;
-        if ( isProbabilitySet(idD) ) cOrD = 1;
-        if (cOrD != -1) {
-            CategoryRecord* c;
-            if (cOrD == 0) c = getCategory( idC );
-            if (cOrD == 1) c = getCategory( idD );
+        int cId = -1;
+        if ( isProbabilitySet(idC) ) {
+            cId = idC;
+        } else if ( isProbabilitySet(idD) ) {
+            cId = idD;
+        }
+        if (cId != -1) {
+            CategoryRecord* c = getCategory( cId );
             SimpleVector<int> idSet = c->objectIDSet;
             for (int i=0; i<idSet.size(); i++) {
                 TransRecord* staticTrans = new TransRecord;
                 *staticTrans = *trans;
                 int newId = idSet.getElementDirect(i);
-                if (cOrD == 0) staticTrans->newActor = newId;
-                if (cOrD == 1) staticTrans->newTarget = newId;
-                results.push_back(staticTrans);
+                // if (staticTrans->actor == cId) staticTrans->actor = newId;
+                // if (staticTrans->target == cId) staticTrans->target = newId;
+                if (staticTrans->newActor == cId) staticTrans->newActor = newId;
+                if (staticTrans->newTarget == cId) staticTrans->newTarget = newId;
+
+                temp.push_back(staticTrans);
             }
             continue;
         }
         
+        temp.push_back(trans);
+
+    }
+
+    // int numCategoriesForObject = getNumCategoriesForObject( objId );
+    // for (int i=0; i<numCategoriesForObject; i++) {
+    //     int cId = getCategoryForObject(objId, i);
+    //     CategoryRecord* c = getCategory( cId );
+
+    //     if (c->isProbabilitySet) {
+    //         SimpleVector<TransRecord*> *usePTrans = getAllUses( cId );
+    //         int numPTrans = 0;
+    //         if( usePTrans != NULL ) {
+    //             numPTrans = usePTrans->size();
+    //         }
+    //         for( int t=0; t<numPTrans; t++ ) {
+    //             TransRecord* staticTrans = new TransRecord;
+    //             *staticTrans = *(usePTrans->getElementDirect( t ));
+                
+    //             if (staticTrans->actor == cId) staticTrans->actor = objId;
+    //             if (staticTrans->target == cId) staticTrans->target = objId;
+    //             if (staticTrans->newActor == cId) staticTrans->newActor = objId;
+    //             if (staticTrans->newTarget == cId) staticTrans->newTarget = objId;
+                
+    //             temp.push_back(staticTrans);
+    //         }
+    //     }
+    // }
+
+    vector<TransRecord*> results;
+    for( size_t t=0; t<temp.size(); t++ ) {
+        TransRecord *trans = temp[t];
+        int idA = trans->actor;
+        int idB = trans->target;
+        int idC = trans->newActor;
+        int idD = trans->newTarget;
+
         //Skip useDummy when not holding them (e.g. holding bowl, skip bucket of water useDummies, only keep first and last use)
         if ( isUseDummyAndNotLastUse(idA) && isUseDummyAndNotLastUse(idC) && idA != objId ) continue;
         if ( isUseDummyAndNotLastUse(idB) && isUseDummyAndNotLastUse(idD) && idB != objId ) continue;
@@ -923,15 +954,15 @@ vector<TransRecord*> minitech::getUsesTrans(int objId) {
             //No container-ception, this probably results from cont tag inheritance
             if( idA == idB ) continue;
             //Similarly, this results from cont tag inheritance
-            if( getObject(idA) != NULL && getObject(idB) != NULL &&
+            if( idA > 0 && idB > 0 && 
+                getObject(idA) != NULL && getObject(idB) != NULL &&
                 getObject(idA)->permanent && getObject(idB)->permanent ) continue;
         }
         
         //Skip transitions that involve uncraftable objects
         if ( !showUncraftables && (isUncraftable(idA) || isUncraftable(idB) || isUncraftable(idC) || isUncraftable(idD)) ) continue;
-        
-        results.push_back(trans);
 
+        results.push_back(trans);
     }
     
     return results;
@@ -940,43 +971,79 @@ vector<TransRecord*> minitech::getUsesTrans(int objId) {
 vector<TransRecord*> minitech::getProdTrans(int objId) {
     
     SimpleVector<TransRecord*> *prodTrans = getAllProduces( objId );
-    vector<TransRecord*> results;
-    
-    int numTrans = 0;
-    if( prodTrans != NULL ) {
-        numTrans = prodTrans->size();
-    }
+    vector<TransRecord*> temp;
+    if( prodTrans == NULL ) return temp;
 
-    for( int t=0; t<numTrans; t++ ) {
+    for( int t=0; t<prodTrans->size(); t++ ) {
         
         TransRecord *trans = prodTrans->getElementDirect( t );
         
-        int idA = trans->actor;
-        int idB = trans->target;
+        // int idA = trans->actor;
+        // int idB = trans->target;
         int idC = trans->newActor;
         int idD = trans->newTarget;
 
         //parse probabilitySet transitions (e.g. the only transitin making Pond with Dead Goose has a probSet as newActor)
-        int cOrD = -1;
-        if ( isProbabilitySet(idC) ) cOrD = 0;
-        if ( isProbabilitySet(idD) ) cOrD = 1;
-        if (cOrD != -1) {
-            CategoryRecord* c;
-            if (cOrD == 0) c = getCategory( idC );
-            if (cOrD == 1) c = getCategory( idD );
+        int cId = -1;
+        if ( isProbabilitySet(idC) ) {
+            cId = idC;
+        } else if ( isProbabilitySet(idD) ) {
+            cId = idD;
+        }
+        if (cId != -1) {
+            CategoryRecord* c = getCategory( cId );
             SimpleVector<int> idSet = c->objectIDSet;
             for (int i=0; i<idSet.size(); i++) {
                 TransRecord* staticTrans = new TransRecord;
                 *staticTrans = *trans;
                 int newId = idSet.getElementDirect(i);
-                if (cOrD == 0) staticTrans->newActor = newId;
-                if (cOrD == 1) staticTrans->newTarget = newId;
-                if( staticTrans->newActor == objId || staticTrans->newTarget == objId )
-                    results.push_back(staticTrans);
+                // if (staticTrans->actor == cId) staticTrans->actor = newId;
+                // if (staticTrans->target == cId) staticTrans->target = newId;
+                if (staticTrans->newActor == cId) staticTrans->newActor = newId;
+                if (staticTrans->newTarget == cId) staticTrans->newTarget = newId;
+
+                temp.push_back(staticTrans);
             }
             continue;
         }
         
+        temp.push_back(trans);
+
+    }
+
+    // int numCategoriesForObject = getNumCategoriesForObject( objId );
+    // for (int i=0; i<numCategoriesForObject; i++) {
+    //     int cId = getCategoryForObject(objId, i);
+    //     CategoryRecord* c = getCategory( cId );
+
+    //     if (c->isProbabilitySet) {
+    //         SimpleVector<TransRecord*> *prodPTrans = getAllProduces( cId );
+    //         int numPTrans = 0;
+    //         if( prodPTrans != NULL ) {
+    //             numPTrans = prodPTrans->size();
+    //         }
+    //         for( int t=0; t<numPTrans; t++ ) {
+    //             TransRecord* staticTrans = new TransRecord;
+    //             *staticTrans = *(prodPTrans->getElementDirect( t ));
+                
+    //             if (staticTrans->actor == cId) staticTrans->actor = objId;
+    //             if (staticTrans->target == cId) staticTrans->target = objId;
+    //             if (staticTrans->newActor == cId) staticTrans->newActor = objId;
+    //             if (staticTrans->newTarget == cId) staticTrans->newTarget = objId;
+                
+    //             temp.push_back(staticTrans);
+    //         }
+    //     }
+    // }
+    
+    vector<TransRecord*> results;
+    for( size_t t=0; t<temp.size(); t++ ) {
+        TransRecord *trans = temp[t];
+        int idA = trans->actor;
+        int idB = trans->target;
+        int idC = trans->newActor;
+        int idD = trans->newTarget;
+
         //Skip the use of the object which returns the object itself (e.g. sharp stone on branches)
         if ( idA == objId || idB == objId ) continue;
         //Skip useDummy when not holding them (e.g. holding bowl, skip bucket of water useDummies, only keep first and last use)
@@ -1002,34 +1069,8 @@ vector<TransRecord*> minitech::getProdTrans(int objId) {
         
         //Strangely there are results that do not make the object at all e.g. bowl of water, reason unknown yet
         if (idC != objId && idD != objId) continue;
-        
-        results.push_back(trans);
 
-    }
-    
-    int numCategoriesForObject = getNumCategoriesForObject( objId );
-    for (int i=0; i<numCategoriesForObject; i++) {
-        int cId = getCategoryForObject(objId, i);
-        CategoryRecord* c = getCategory( cId );
-        
-        if (c->isProbabilitySet) {
-            SimpleVector<TransRecord*> *prodPTrans = getAllProduces( cId );
-            int numPTrans = 0;
-            if( prodPTrans != NULL ) {
-                numPTrans = prodPTrans->size();
-            }
-            for( int t=0; t<numPTrans; t++ ) {
-                TransRecord* staticTrans = new TransRecord;
-                *staticTrans = *(prodPTrans->getElementDirect( t ));
-                
-                if (staticTrans->actor == cId) staticTrans->actor = objId;
-                if (staticTrans->target == cId) staticTrans->target = objId;
-                if (staticTrans->newActor == cId) staticTrans->newActor = objId;
-                if (staticTrans->newTarget == cId) staticTrans->newTarget = objId;
-                
-                results.push_back(staticTrans);
-            }
-        }
+        results.push_back(trans);
     }
     
     return results;
@@ -1040,7 +1081,7 @@ vector<TransRecord*> minitech::sortUsesTrans(vector<TransRecord*> unsortedTrans)
     vector<bool> boolCloseVect = getObjIsCloseVector();
     vector<float> rankScores(unsortedTrans.size(), 0);
     
-    for ( int i=0; i<(int)unsortedTrans.size(); i++ ) {
+    for ( size_t i=0; i<unsortedTrans.size(); i++ ) {
         TransRecord *trans = unsortedTrans[i];
         
         int idA = trans->actor;
@@ -1104,7 +1145,7 @@ vector<TransRecord*> minitech::sortProdTrans(vector<TransRecord*> unsortedTrans)
     vector<bool> boolCloseVect = getObjIsCloseVector();
     vector<float> rankScores(unsortedTrans.size(), 0);
     
-    for ( int i=0; i<(int)unsortedTrans.size(); i++ ) {
+    for ( size_t i=0; i<unsortedTrans.size(); i++ ) {
         TransRecord *trans = unsortedTrans[i];
         
         int idA = trans->actor;
@@ -1412,6 +1453,13 @@ void minitech::updateDrawTwoTech() {
                 ) {
                     // out
                     inOrOutContainmentTrans = 1;
+                } else {
+                    // both newActor and newTarget are containers
+                    if( newActor->permanent ) {
+                        inOrOutContainmentTrans = 1;
+                    } else {
+                        inOrOutContainmentTrans = 0;
+                    }
                 }
             }
 
@@ -1680,7 +1728,7 @@ void minitech::updateDrawTwoTech() {
             pos.x += iconSize;
             if (trans->actor == -1 && trans->autoDecaySeconds != 0 && trans->newActor == 0) {
                 //not drawing the plus sign for pure Changes over time...
-            } else if (trans->target == -1 && trans->newTarget == 0) {
+            } else if (trans->target == -1 && trans->newTarget == 0 && trans->contTransFlag == 0) {
                 //not drawing the plus sign for eating transitions
             } else {
                 if( trans->contTransFlag == 0 || inOrOutContainmentTrans ) {
@@ -1971,7 +2019,7 @@ void minitech::drawIconOnHoverTips() {
     float iconSize = 76.0/2 *guiScale;
     float iconCaptionYOffset = - iconSize/2;
     float tinyLineHeight = 12.0 *guiScale;
-    for (int i=0; i<(int)iconListenerIds.size(); i++) {
+    for (size_t i=0; i<iconListenerIds.size(); i++) {
         mouseListener* listener = iconListenerIds[i].first;
         int id = iconListenerIds[i].second;
         doublePair iconLT = add(listener->posTL, screenPos);
@@ -2313,10 +2361,12 @@ void minitech::livingLifeDraw(float mX, float mY) {
         }
         listener->mouseHover = false;
         
-        if ( !listener->mouseHover && !listener->mouseClick ) {
-            if( listener != NULL ) delete listener;
-            twotechMouseListeners.erase( twotechMouseListeners.begin() + i );
-        }
+		if ( !listener->mouseHover && !listener->mouseClick ) {
+			delete listener;
+			twotechMouseListeners.erase( twotechMouseListeners.begin() + i );
+			if (prevListener == listener) prevListener = NULL;
+			if (nextListener == listener) nextListener = NULL;
+		}
     }
     
     // if ( prevListener != NULL ) {
@@ -2405,46 +2455,37 @@ void minitech::livingLifeStep() {
 }
 
 bool minitech::livingLifeKeyDown(unsigned char inASCII) {
-    
-    bool commandKey = isCommandKeyDown();
-    bool shiftKey = isShiftKeyDown();
 
-    if( commandKey && !shiftKey && inASCII == 24 ) { // ctrl + X
+    if( KeybindManager::isActive( "minitechNextObj" ) ) {
         nextHintObj();
         return true;
-    }
-    if( commandKey && !shiftKey && inASCII == 26 ) { // ctrl + Z
+        }
+    if( KeybindManager::isActive( "minitechPrevObj" ) ) {
         prevHintObj();
         return true;
-    }
-    
-    if (!commandKey && !shiftKey && inASCII == 9) {
-        currentTwoTechPage += 1;
-    }
-    
-    if (!commandKey && shiftKey && inASCII == 9) {
-        currentTwoTechPage -= 1;
-    }
-    
-    if (!shiftKey && !commandKey && toupper(inASCII) == toupper(minimizeKey)) { //V
-        // Minitech minimized
-        minitechMinimized = !minitechMinimized;
-
-        // Clear current hinting object
-        highlightObjId = 0;
-
-        // Clear the listeners to avoid any lingering
-        for (auto p: twotechMouseListeners) {
-            delete(p);
         }
+
+    if( KeybindManager::isActive( "minitechPageNext" ) ) {
+        currentTwoTechPage += 1;
+        }
+
+    if( KeybindManager::isActive( "minitechPagePrev" ) ) {
+        currentTwoTechPage -= 1;
+        }
+
+    if( KeybindManager::isActive( "minitechMinimize" ) ) {
+        minitechMinimized = !minitechMinimized;
+        highlightObjId = 0;
+        for( auto p: twotechMouseListeners ) {
+            delete( p );
+            }
         twotechMouseListeners.clear();
         twotechMouseListeners.shrink_to_fit();
+        }
 
-    }
-    
-    if (!shiftKey && commandKey && inASCII + 64 == toupper(minimizeKey)) { //Ctrl + V
+    if( KeybindManager::isActive( "minitechSwitchMode" ) ) {
         useOrMake = 1 - useOrMake;
-    }
+        }
     
     // if ( inASCII == 'p' ) {
         // guiScale += 0.3;
@@ -2477,7 +2518,7 @@ bool minitech::livingLifePageMouseDown( float mX, float mY ) {
     doublePair mousePosScreenAdj = sub(mousePos, screenPos);
     
     bool clickCaught = false;
-    for ( int i=0; i<(int)twotechMouseListeners.size(); i++ ) {
+    for ( size_t i=0; i<twotechMouseListeners.size(); i++ ) {
         mouseListener* listener = twotechMouseListeners[i];
         if ( posWithinArea(mousePosScreenAdj, listener->posTL, listener->posBR) ) {
             listener->mouseClick = true;
